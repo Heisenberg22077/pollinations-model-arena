@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Model Table — One Question, Every Model</title>
+    <meta
+      name="description"
+      content="Ask one question and watch OpenAI, DeepSeek, Meta, xAI, Z.ai and FLUX answer side by side. Live latency, token count and Pollen cost per model. You pay with your own Pollen."
+    />
+    <meta name="theme-color" content="#d8cfc0" />
+    <script>
+      try {
+        if (localStorage.getItem("model-table:color-mode") === "night") {
+          document.documentElement.dataset.colorMode = "night";
+          document.querySelector('meta[name="theme-color"]').content = "#161411";
+        }
+        if (
+          localStorage.getItem("model-table:motion-paused") === "true" ||
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ) {
+          document.documentElement.dataset.motion = "off";
+        }
+      } catch {}
+    </script>
+    <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
+    <link rel="manifest" href="%BASE_URL%manifest.webmanifest" />
+    <link rel="canonical" href="https://heisenberg22077.github.io/pollinations-model-arena/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Model Table — One Question, Every Model" />
+    <meta property="og:description" content="Compare answers, speed, reasoning and Pollen cost across 13 Pollinations models. Bring Your Own Pollen." />
+    <meta property="og:url" content="https://heisenberg22077.github.io/pollinations-model-arena/" />
+    <meta property="og:image" content="https://heisenberg22077.github.io/pollinations-model-arena/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Model Table: One Question, Every Model" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Model Table — One Question, Every Model" />
+    <meta name="twitter:description" content="One question. Thirteen models. Compare answers, speed and Pollen cost." />
+    <meta name="twitter:image" content="https://heisenberg22077.github.io/pollinations-model-arena/og.png" />
+    <link
+      rel="preload"
+      href="%BASE_URL%fonts/Geist-Variable.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="%BASE_URL%fonts/GeistPixel-Square.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/npm/@pollinations/ui@0.1.0-alpha.20/dist/connect.js"
+    ></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

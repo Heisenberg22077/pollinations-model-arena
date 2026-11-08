@@ -1,0 +1,55 @@
+{
+  "repository": "pollinations/pollinations",
+  "revision": "62d7cc4df19aef8a68363046330ab584fc2f6921",
+  "license": "MIT",
+  "assets": [
+    {
+      "file": "pollinations-garden-day.webp",
+      "source": "pollinations.ai/public/art/home-hero-day-1024.webp",
+      "bytes": 46260,
+      "blob": "d46d5b519e3b36f6e93b5feda7627dffd91b8d2d"
+    },
+    {
+      "file": "pollinations-garden-night.webp",
+      "source": "pollinations.ai/public/art/home-hero-night-1024.webp",
+      "bytes": 44414,
+      "blob": "8b162d0f004137266953d4dea0c4443e0cde04bd"
+    },
+    {
+      "file": "pollinations-garden-day-2048.webp",
+      "source": "pollinations.ai/public/art/home-hero-day.webp",
+      "bytes": 89458,
+      "blob": "7b545893fbe2d97e916a5f7e237303648f04f69b"
+    },
+    {
+      "file": "pollinations-garden-night-2048.webp",
+      "source": "pollinations.ai/public/art/home-hero-night.webp",
+      "bytes": 87702,
+      "blob": "fd0e2958abd890af3c3bcf81f8cc871836c11c3d"
+    },
+    {
+      "file": "pollinations-closing-day.webp",
+      "source": "pollinations.ai/public/art/home-closing-day.webp",
+      "bytes": 162904,
+      "blob": "686fdfc6e722bd1a16b27d0b229cbc297378b067"
+    },
+    {
+      "file": "pollinations-closing-night.webp",
+      "source": "pollinations.ai/public/art/home-closing-night.webp",
+      "bytes": 124572,
+      "blob": "140bc997a345432b7907a7bd8502e21ac4e3694d"
+    },
+    {
+      "file": "pollinations-closing-day-1024.webp",
+      "source": "pollinations.ai/public/art/home-closing-day-1024.webp",
+      "bytes": 62978,
+      "blob": "59caa675d69c9c58c0d4064be79a326cad8c9611"
+    },
+    {
+      "file": "pollinations-closing-night-1024.webp",
+      "source": "pollinations.ai/public/art/home-closing-night-1024.webp",
+      "bytes": 53650,
+      "blob": "617946e35964af274e23d678cd3d67c8dc8b3494"
+    }
+  ]
+}

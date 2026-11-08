@@ -1,0 +1,7 @@
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.webp binary
+*.woff2 binary
+# Keep the original upstream notice, including its whitespace.
+public/fonts/Geist-OFL.txt -whitespace

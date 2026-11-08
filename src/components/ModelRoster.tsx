@@ -1,0 +1,215 @@
+import { Check, ChevronDown, Coins, Image as ImageIcon } from "lucide-react";
+import * as m from "motion/react-m";
+import { useLayoutEffect, useRef, useState } from "react";
+import type { ModelDef } from "../config";
+import { animateFeedback } from "../lib/motion";
+import type { HealthStatus } from "../types";
+import { CollapsibleRegion } from "./AnimatedDisclosure";
+import { useMotionSettings } from "./MotionProvider";
+
+function ModelToggle({
+  model,
+  selected,
+  onToggle,
+  health,
+}: {
+  model: ModelDef;
+  selected: boolean;
+  onToggle: () => void;
+  health: HealthStatus | undefined;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      aria-label={model.name}
+      disabled={health === "down"}
+      title={
+        health === "down"
+          ? "Currently down; excluded from the lineup."
+          : health === "degraded"
+            ? "Provider health is degraded; responses may be slower."
+            : model.blurb
+      }
+      onClick={(event) => {
+        if (!selected)
+          animateFeedback(
+            event.currentTarget.querySelector(".selection-check"),
+            [
+              { transform: "scale(0.92)", opacity: 0 },
+              { transform: "scale(1)", opacity: 1 },
+            ],
+            160,
+          );
+        onToggle();
+      }}
+      className="model-toggle"
+    >
+      <span
+        className="provider-dot"
+        style={{ background: health === "degraded" ? "#f59e0b" : model.color }}
+        aria-hidden="true"
+      />
+      <span className="model-toggle-name">
+        <span>{model.name}</span>
+        {health === "down" ? (
+          <span className="model-toggle-note text-orange">Down</span>
+        ) : model.paidOnly ? (
+          <span className="model-toggle-note text-orange">
+            <Coins className="h-3 w-3" aria-hidden="true" /> Paid
+          </span>
+        ) : model.kind === "image" ? (
+          <ImageIcon className="h-3 w-3 text-quiet" aria-label="Image model" />
+        ) : null}
+      </span>
+      <span className="selection-check" aria-hidden="true">
+        <Check className="h-3.5 w-3.5" />
+      </span>
+    </button>
+  );
+}
+
+export function ModelRoster({
+  models,
+  health,
+  selectedIds,
+  onToggle,
+  onPreset,
+}: {
+  models: ModelDef[];
+  health: Record<string, HealthStatus>;
+  selectedIds: string[];
+  onToggle: (id: string) => void;
+  onPreset: (preset: "core" | "free" | "all") => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const presetsRef = useRef<HTMLFieldSetElement>(null);
+  const [presetFrame, setPresetFrame] = useState<{ left: number; width: number } | null>(null);
+  const { reduce } = useMotionSettings();
+  const core = models.filter((model) => model.core);
+  const moreFree = models.filter((model) => !model.core && !model.paidOnly);
+  const premium = models.filter((model) => model.paidOnly);
+  const selected = (id: string) => selectedIds.includes(id);
+  const presetActive = (preset: "core" | "free" | "all") => {
+    const ids = models
+      .filter((model) => health[model.id] !== "down")
+      .filter((model) => preset === "all" || (preset === "core" ? model.core : !model.paidOnly))
+      .map((model) => model.id);
+    return ids.length === selectedIds.length && ids.every(selected);
+  };
+  const activePreset = (["core", "free", "all"] as const).find(presetActive);
+  useLayoutEffect(() => {
+    const fieldset = presetsRef.current;
+    if (!fieldset) return;
+    const measure = () => {
+      const button = fieldset.querySelector<HTMLButtonElement>(
+        `button[data-preset="${activePreset}"]`,
+      );
+      if (!button) {
+        setPresetFrame(null);
+        return;
+      }
+      const parentBox = fieldset.getBoundingClientRect();
+      const buttonBox = button.getBoundingClientRect();
+      const next = { left: buttonBox.left - parentBox.left, width: buttonBox.width };
+      setPresetFrame((previous) =>
+        previous?.left === next.left && previous.width === next.width ? previous : next,
+      );
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(fieldset);
+    return () => observer.disconnect();
+  }, [activePreset]);
+  const toggle = (model: ModelDef) => (
+    <ModelToggle
+      key={model.id}
+      model={model}
+      selected={selected(model.id)}
+      health={health[model.id]}
+      onToggle={() => onToggle(model.id)}
+    />
+  );
+
+  return (
+    <section id="roster" className="model-roster">
+      <div className="roster-toolbar">
+        <div className="roster-title">
+          <h2>Model lineup</h2>
+          <span className="selection-count">{selectedIds.length} selected</span>
+        </div>
+        <fieldset ref={presetsRef} className="roster-presets min-w-0" aria-label="Lineup presets">
+          {presetFrame ? (
+            <m.span
+              className="preset-highlight"
+              aria-hidden="true"
+              initial={false}
+              animate={{ left: presetFrame.left, width: presetFrame.width }}
+              transition={
+                reduce ? { duration: 0 } : { type: "spring", stiffness: 460, damping: 38 }
+              }
+            />
+          ) : null}
+          {(
+            [
+              ["core", `Core ${core.length}`],
+              ["free", "Quest Pollen"],
+              ["all", "All models"],
+            ] as const
+          ).map(([preset, label]) => (
+            <button
+              key={preset}
+              type="button"
+              onClick={() => {
+                onPreset(preset);
+                setOpen(preset !== "core");
+              }}
+              aria-pressed={presetActive(preset)}
+              data-preset={preset}
+              className="preset-button"
+            >
+              <span className="preset-label">{label}</span>
+            </button>
+          ))}
+        </fieldset>
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          aria-expanded={open}
+          aria-controls="extra-models"
+          className="more-models-button"
+        >
+          {open ? "Hide extra models" : `More models (${moreFree.length + premium.length})`}
+          <ChevronDown
+            className={`guide-chevron h-3.5 w-3.5${open ? " rotate-180" : ""}`}
+            aria-hidden="true"
+          />
+        </button>
+      </div>
+
+      <fieldset className="roster-grid min-w-0" aria-label="Core models">
+        {core.map(toggle)}
+      </fieldset>
+
+      <CollapsibleRegion open={open} id="extra-models" className="extra-models">
+        <div className="extra-models-content">
+          <fieldset className="roster-grid min-w-0" aria-label="More models">
+            {moreFree.map(toggle)}
+          </fieldset>
+          <div className="premium-lineup">
+            <p>Needs paid Pollen</p>
+            <fieldset className="roster-grid min-w-0" aria-label="Paid models">
+              {premium.map(toggle)}
+            </fieldset>
+          </div>
+        </div>
+      </CollapsibleRegion>
+      {selectedIds.length === 0 ? (
+        <p className="roster-notice">Pick a model to join the table.</p>
+      ) : null}
+      {Object.values(health).includes("down") ? (
+        <p className="roster-notice">Models marked down are excluded automatically.</p>
+      ) : null}
+    </section>
+  );
+}
