@@ -1,5 +1,6 @@
 import { domMax, LazyMotion, MotionConfig } from "motion/react";
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
+import { SPRINGS } from "../lib/motion";
 
 const MOTION_STORAGE = "model-table:motion-paused";
 const MotionSettings = createContext({ reduce: false, paused: false, togglePaused: () => {} });
@@ -43,7 +44,7 @@ export function MotionProvider({ children }: { children: ReactNode }) {
     <LazyMotion features={domMax} strict>
       <MotionConfig
         reducedMotion={reduce ? "always" : "never"}
-        transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 420, damping: 38 }}
+        transition={reduce ? { duration: 0 } : SPRINGS.fluid}
       >
         <MotionSettings.Provider
           value={{ reduce, paused, togglePaused: () => setPaused((value) => !value) }}

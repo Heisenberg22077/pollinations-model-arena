@@ -32,6 +32,17 @@
   "css": {
     "parser": { "tailwindDirectives": true }
   },
+  "overrides": [
+    {
+      "includes": ["public/logos/*.svg"],
+      "formatter": { "enabled": false },
+      "linter": {
+        "rules": {
+          "a11y": { "noSvgWithoutTitle": "off" }
+        }
+      }
+    }
+  ],
   "assist": {
     "enabled": true,
     "actions": {

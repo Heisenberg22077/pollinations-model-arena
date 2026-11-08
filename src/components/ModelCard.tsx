@@ -16,6 +16,7 @@ import { formatLatency, formatMsTick, formatPollen, formatTokens } from "../lib/
 import { animateFeedback } from "../lib/motion";
 import { billableCompletionTokens, textCostBreakdown } from "../lib/pollinations";
 import type { ErrorCode, Run } from "../types";
+import { ModelLogo } from "./ModelLogo";
 
 function useNow(active: boolean): number {
   const [now, setNow] = useState(Date.now);
@@ -110,7 +111,7 @@ export function ModelCard({
   onRerun: (id: string) => void;
   question: string;
 }) {
-  const entrance = useEntrance(index);
+  const entrance = useEntrance(index, true);
   const now = useNow(run?.status === "pending");
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [expanded, setExpanded] = useState(false);
@@ -118,10 +119,6 @@ export function ModelCard({
   const [imageOpen, setImageOpen] = useState(false);
   const imageDialogRef = useRef<HTMLDialogElement>(null);
   const answerRef = useRef<HTMLParagraphElement>(null);
-  const answerBodyRef = useRef<HTMLDivElement>(null);
-  const answerAnimationRef = useRef<Animation | undefined>(undefined);
-  const answerFrameRef = useRef(0);
-  const collapsedHeightRef = useRef(0);
   const status = run?.status ?? "idle";
   const reasoning = run?.usage?.completion_tokens_details?.reasoning_tokens ?? 0;
   const answerId = `answer-${model.short}-${index}`;
@@ -153,48 +150,18 @@ export function ModelCard({
   };
 
   const toggleExpanded = () => {
-    const body = answerBodyRef.current;
-    const answer = answerRef.current;
-    if (!body || !answer) return;
-    const from = body.getBoundingClientRect().height;
-    if (!expanded && !answerAnimationRef.current) collapsedHeightRef.current = from;
-    const to = expanded ? collapsedHeightRef.current : answer.scrollHeight;
-    const previous = answerAnimationRef.current;
-    answerAnimationRef.current = undefined;
-    previous?.cancel();
-    cancelAnimationFrame(answerFrameRef.current);
-    body.style.flex = "none";
-    body.style.height = `${from}px`;
     setExpanded((value) => !value);
-    answerFrameRef.current = requestAnimationFrame(() => {
-      if (!body.isConnected) return;
-      body.style.height = `${to}px`;
-      const animation = animateFeedback(
-        body,
-        [{ height: `${from}px` }, { height: `${to}px` }],
-        360,
-      );
-      answerAnimationRef.current = animation;
-      const settle = () => {
-        if (answerAnimationRef.current !== animation) return;
-        answerAnimationRef.current = undefined;
-        body.style.height = "";
-        body.style.flex = "";
-      };
-      if (animation) void animation.finished.then(settle, settle);
-      else settle();
-    });
+    // Native flow changes once; only the text layer animates, without scaling glyphs.
+    animateFeedback(
+      answerRef.current,
+      [
+        { opacity: 0.65, transform: "translateY(4px)" },
+        { opacity: 1, transform: "translateY(0)" },
+      ],
+      undefined,
+      "fluid",
+    );
   };
-
-  useEffect(
-    () => () => {
-      cancelAnimationFrame(answerFrameRef.current);
-      const animation = answerAnimationRef.current;
-      answerAnimationRef.current = undefined;
-      animation?.cancel();
-    },
-    [],
-  );
 
   const showImage = () => {
     const dialog = imageDialogRef.current;
@@ -207,7 +174,8 @@ export function ModelCard({
         { opacity: 0, transform: "translateY(6px) scale(0.98)" },
         { opacity: 1, transform: "translateY(0) scale(1)" },
       ],
-      320,
+      undefined,
+      "fluid",
     );
   };
 
@@ -225,14 +193,22 @@ export function ModelCard({
       <header className="model-heading">
         <div className="model-provider-row">
           <div className="model-provider">
-            <span className="provider-dot" style={{ background: model.color }} aria-hidden="true" />
+            <ModelLogo model={model} />
             <span>{model.provider}</span>
           </div>
           <div className="flex shrink-0 items-center">
             {run?.text && status === "done" ? (
               <button
                 type="button"
-                onClick={copyText}
+                onClick={(event) => {
+                  animateFeedback(
+                    event.currentTarget.firstElementChild,
+                    [{ transform: "scale(0.8)" }, { transform: "scale(1)" }],
+                    undefined,
+                    "bouncy",
+                  );
+                  void copyText();
+                }}
                 aria-label={`Copy ${model.name} answer`}
                 title={
                   copyState === "failed"
@@ -243,11 +219,13 @@ export function ModelCard({
                 }
                 className="icon-button"
               >
-                {copyState === "copied" ? (
-                  <Check className="h-3.5 w-3.5" aria-hidden="true" />
-                ) : (
-                  <ClipboardCopy className="h-3.5 w-3.5" aria-hidden="true" />
-                )}
+                <span className="action-icon" aria-hidden="true">
+                  {copyState === "copied" ? (
+                    <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                  ) : (
+                    <ClipboardCopy className="h-3.5 w-3.5" aria-hidden="true" />
+                  )}
+                </span>
               </button>
             ) : null}
             <button
@@ -265,14 +243,16 @@ export function ModelCard({
         <h3 title={model.id}>{model.name}</h3>
       </header>
 
-      <div className="answer-body" ref={answerBodyRef}>
+      <div className="answer-body">
         {status === "pending" ? (
           <div className="pending-answer">
             <p className="run-phase" role="status">
               {run?.phase === "queued" ? (
                 <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
               ) : (
-                <LoaderCircle className="status-spin h-3.5 w-3.5" aria-hidden="true" />
+                <span className="live-status" aria-hidden="true">
+                  <LoaderCircle className="status-spin h-3.5 w-3.5" />
+                </span>
               )}
               {run?.phase === "queued"
                 ? "Waiting for dispatch…"

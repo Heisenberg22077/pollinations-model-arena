@@ -158,10 +158,15 @@ export function Header({
           <button
             type="button"
             onClick={(event) => {
-              animateFeedback(event.currentTarget.firstElementChild, [
-                { transform: "rotate(-35deg) scale(0.94)", opacity: 0.5 },
-                { transform: "rotate(0deg) scale(1)", opacity: 1 },
-              ]);
+              animateFeedback(
+                event.currentTarget.firstElementChild,
+                [
+                  { transform: "rotate(-90deg) scale(0.6)", opacity: 0.4 },
+                  { transform: "rotate(0deg) scale(1)", opacity: 1 },
+                ],
+                undefined,
+                "fluid",
+              );
               onToggleColorMode();
             }}
             aria-label={colorMode === "day" ? "Switch to night mode" : "Switch to day mode"}

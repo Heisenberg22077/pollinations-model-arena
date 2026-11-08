@@ -30,6 +30,10 @@ try {
     ["Z.ai", "#8b5cf6", "Text answer"],
     ["FLUX", "#f59e0b", "Visual answer"],
   ];
+  const logoFiles = ["openai", "deepseek-color", "meta-color", "grok", "zai", "bfl"];
+  const logos = await Promise.all(
+    logoFiles.map(async (name) => (await readFile(`public/logos/${name}.svg`)).toString("base64")),
+  );
   await page.setViewportSize({ width: 1200, height: 630 });
   await page.setContent(`<!doctype html><html lang="en"><head><style>
     @font-face{font-family:Pixel;src:url(data:font/woff2;base64,${pixel}) format('woff2')}
@@ -56,7 +60,7 @@ try {
     .models{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-top:10px}
     .model{height:112px;border:1px solid #8c816f;border-top:3px solid var(--provider);padding:13px}
     .model small{display:flex;align-items:center;gap:7px;font:11px Mono,monospace;color:#665b4a}
-    .model i{width:6px;height:6px;background:var(--provider)}.model h2{font-size:19px;font-weight:550;margin:10px 0 7px}.model p{font-size:12px;color:#665b4a;margin:0}
+    .model img{width:18px;height:18px;object-fit:contain}.model h2{font-size:19px;font-weight:550;margin:10px 0 7px}.model p{font-size:12px;color:#665b4a;margin:0}
     footer{display:flex;align-items:center;justify-content:space-between;margin-top:28px;font-size:13px;color:#665b4a}
     .signature{font:30px Pixel,monospace;word-spacing:.08em;color:#272117}
   </style></head><body>
@@ -71,11 +75,11 @@ try {
           <div class="starters"><span>Try</span><a>Humans</a><a>Love</a><a>Inventions</a></div>
         </div>
       </div>
-      <div class="lineup">Model lineup <span>6 selected</span><strong>Core 6</strong><span>Quest Pollen</span><span>All models</span></div>
+      <div class="lineup">Model lineup <span>6 selected</span><strong>Core 6</strong><span>Standard models</span><span>All models</span></div>
       <div class="models">${providers
         .map(
-          ([name, color, kind]) => `
-        <div class="model" style="--provider:${color}"><small><i></i>Independent answer</small><h2>${name}</h2><p>${kind}</p></div>
+          ([name, color, kind], index) => `
+        <div class="model" style="--provider:${color}"><small><img src="data:image/svg+xml;base64,${logos[index]}" alt="">Independent answer</small><h2>${name}</h2><p>${kind}</p></div>
       `,
         )
         .join("")}</div>

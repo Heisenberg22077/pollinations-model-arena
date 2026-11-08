@@ -64,7 +64,21 @@ for (const asset of provenance.assets) {
 await readFile("dist/art/POLLINATIONS-LICENSE.txt");
 await readFile("dist/fonts/Geist-OFL.txt");
 await readFile("dist/licenses/LIBRARIES.txt");
+const logoProvenance = JSON.parse(await readFile("dist/logos/PROVENANCE.json", "utf8"));
+assert.equal(logoProvenance.assets.length, 12);
+for (const asset of logoProvenance.assets) {
+  const bytes = await readFile(`dist/logos/${asset.file}`);
+  assert(bytes.toString("utf8").includes("viewBox="));
+  assert.equal(bytes.length, asset.bytes);
+  const blob = createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex");
+  assert.equal(blob, asset.blob, `Model logo bytes changed: ${asset.file}`);
+  if (asset.sha256) {
+    assert.equal(createHash("sha256").update(bytes).digest("hex"), asset.sha256);
+  }
+}
+await readFile("dist/logos/LOBE-ICONS-LICENSE.txt");
 const report = {
+  verifiedModelLogos: logoProvenance.assets.length,
   base,
   identical404: true,
   jsGzipBytes,

@@ -44,7 +44,7 @@ Geist Pixel Square carries the headline, wordmark and signature; Geist Sans carr
 +----------------------------------------------------------------+
 | Curiosity,                 [wide garden workbench artwork]      |
 | Multiplied.                [scroll and pointer response]        |
-| Quest credit and official Pollinations badge                    |
+| Independent model comparison and official Pollinations badge    |
 +----------------------------------------------------------------+
 ```
 
@@ -58,7 +58,7 @@ Artwork is decorative brand material, separate from generated FLUX answers. Feat
 - Artwork has slow drift, six pollen particles, spring pointer response and native CSS scroll-linked movement where supported. Offscreen and hidden scenes pause.
 - Card hover raises the pane 4px and strengthens its provider rule and header tint. Explicit sorting refreshes opacity in place, preserving answer containment.
 - Generated images fit at rest. Hover provides bounded zoom and a view control; image click or Expand opens the native dialog. Focus containment, Escape and focus return remain intact.
-- Disclosures animate actual height, presets glide, Surprise me decodes, pending pixels reflect requests, and themes crossfade.
+- Disclosures change native flow once and animate translation/opacity, presets glide, Surprise me rolls and decodes, pending pixels reflect requests, and themes crossfade.
 - Presets now use Motion's native shared `layoutId` spring. Offscreen answer panes skip rendering with remembered intrinsic heights. Horizontal roster/table scrolling contains overscroll; mobile model rows retain 16px edge space. Toggle hover lifts 2px, and hover effects animate transforms/opacity only.
 - A persistent Pause animations control stops ambient and interaction motion; the mobile menu includes it. System reduced motion takes precedence. Both preferences apply before first paint.
 

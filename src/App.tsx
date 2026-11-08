@@ -1,3 +1,4 @@
+import { LayoutGroup } from "motion/react";
 import { useCallback, useEffect, useState } from "react";
 import { GardenBanner } from "./components/GardenBanner";
 import { Header } from "./components/Header";
@@ -83,37 +84,39 @@ export default function App() {
       />
 
       <main id="main" tabIndex={-1} className="workspace shell">
-        <PromptComposer
-          prompt={table.prompt}
-          setPrompt={table.setPrompt}
-          selectedIds={table.selectedIds}
-          models={table.roster}
-          health={table.health}
-          history={table.history}
-          onClearHistory={table.clearHistory}
-          onToggle={table.toggleModel}
-          onPreset={(preset) => {
-            if (preset === "core") table.selectCore();
-            else if (preset === "free") table.selectFree();
-            else table.selectAll();
-          }}
-          guideOpen={guideOpen}
-          onGuideToggle={setGuideOpen}
-          colorMode={colorMode}
-        />
-        <ResultsPanel
-          models={table.resultModels}
-          runs={table.runs}
-          isRunning={table.isRunning}
-          lastQuestion={table.lastQuestion}
-          nextQuestion={table.prompt}
-          onRerun={(id) => {
-            if (apiKey) void table.rerunModel(id, apiKey);
-          }}
-          canRerun={Boolean(apiKey) && !table.isRunning}
-          health={table.health}
-          onClear={table.clear}
-        />
+        <LayoutGroup>
+          <PromptComposer
+            prompt={table.prompt}
+            setPrompt={table.setPrompt}
+            selectedIds={table.selectedIds}
+            models={table.roster}
+            health={table.health}
+            history={table.history}
+            onClearHistory={table.clearHistory}
+            onToggle={table.toggleModel}
+            onPreset={(preset) => {
+              if (preset === "core") table.selectCore();
+              else if (preset === "free") table.selectFree();
+              else table.selectAll();
+            }}
+            guideOpen={guideOpen}
+            onGuideToggle={setGuideOpen}
+            colorMode={colorMode}
+          />
+          <ResultsPanel
+            models={table.resultModels}
+            runs={table.runs}
+            isRunning={table.isRunning}
+            lastQuestion={table.lastQuestion}
+            nextQuestion={table.prompt}
+            onRerun={(id) => {
+              if (apiKey) void table.rerunModel(id, apiKey);
+            }}
+            canRerun={Boolean(apiKey) && !table.isRunning}
+            health={table.health}
+            onClear={table.clear}
+          />
+        </LayoutGroup>
       </main>
 
       <footer className="site-footer relative">
@@ -121,18 +124,7 @@ export default function App() {
           <GardenBanner colorMode={colorMode} />
           <div className="footer-content">
             <div className="footer-credits">
-              <p className="text-xs text-quiet">
-                Built for{" "}
-                <a
-                  href="https://github.com/pollinations/pollinations/issues/19183"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-foreground underline decoration-dotted underline-offset-2 hover:text-accent-ink"
-                >
-                  quest #19183
-                </a>
-                . Bring Your Own Pollen.
-              </p>
+              <p className="text-xs text-quiet">Independent AI model comparison.</p>
               <a
                 href="https://pollinations.ai/?ref=badge"
                 target="_blank"

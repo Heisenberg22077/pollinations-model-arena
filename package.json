@@ -18,6 +18,7 @@
     "review:frontend": "node scripts/review-frontend.mjs",
     "review:motion": "node scripts/review-motion.mjs",
     "assets:reference": "node scripts/fetch-reference-art.mjs",
+    "assets:logos": "node scripts/fetch-model-logos.mjs",
     "verify:artifact": "node scripts/verify-artifact.mjs"
   },
   "dependencies": {

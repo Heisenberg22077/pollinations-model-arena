@@ -15,7 +15,6 @@ export const CONNECT_BUDGET = "5";
 export const CONNECT_EXPIRY = "7";
 
 export const REPO_URL = "https://github.com/Heisenberg22077/pollinations-model-arena";
-export const QUEST_URL = "https://github.com/pollinations/pollinations/issues/19183";
 export const TOP_UP_URL = "https://enter.pollinations.ai/top-up";
 
 export interface Pricing {

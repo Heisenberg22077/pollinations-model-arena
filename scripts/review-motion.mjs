@@ -41,10 +41,10 @@ async function prepare(target) {
   return state;
 }
 
-async function profile(name, selector, action, duration = 1000) {
+async function profile(name, selector, action, duration = 1000, pseudo) {
   await page.evaluate(
-    ({ selector, duration }) => {
-      const capture = { frames: [], longTasks: [], done: false };
+    ({ selector, duration, pseudo }) => {
+      const capture = { frames: [], longTasks: [], animatedLayoutProperties: [], done: false };
       window.__motionCapture = capture;
       const observer = new PerformanceObserver((list) => {
         for (const entry of list.getEntries()) capture.longTasks.push(entry.duration);
@@ -53,9 +53,21 @@ async function profile(name, selector, action, duration = 1000) {
       const start = performance.now();
       let previous = start;
       const sample = (now) => {
+        for (const animation of document.getAnimations()) {
+          if (!(animation.effect instanceof KeyframeEffect)) continue;
+          for (const frame of animation.effect.getKeyframes()) {
+            for (const property of Object.keys(frame)) {
+              if (
+                /^(width|height|left|right|top|bottom|padding|margin|clipPath)/.test(property) &&
+                !capture.animatedLayoutProperties.includes(property)
+              )
+                capture.animatedLayoutProperties.push(property);
+            }
+          }
+        }
         const element = document.querySelector(selector);
         const rect = element?.getBoundingClientRect();
-        const style = element && getComputedStyle(element);
+        const style = element && getComputedStyle(element, pseudo);
         capture.frames.push({
           at: now - start,
           interval: now - previous,
@@ -63,6 +75,8 @@ async function profile(name, selector, action, duration = 1000) {
           y: rect?.y,
           width: rect?.width,
           height: rect?.height,
+          layoutHeight: element?.offsetHeight,
+          layoutWidth: element?.offsetWidth,
           opacity: style?.opacity,
           transform: style?.transform,
           translate: style?.translate,
@@ -76,7 +90,7 @@ async function profile(name, selector, action, duration = 1000) {
       };
       requestAnimationFrame(sample);
     },
-    { selector, duration },
+    { selector, duration, pseudo },
   );
   await action();
   await page.waitForFunction(() => window.__motionCapture.done);
@@ -92,9 +106,11 @@ async function profile(name, selector, action, duration = 1000) {
     maxFrameMs: Math.max(...intervals),
     framesOver34Ms: intervals.filter((interval) => interval > 34).length,
     longTasks: capture.longTasks,
+    animatedLayoutProperties: capture.animatedLayoutProperties,
     frames: capture.frames,
   };
   report.profiles.push(result);
+  assert.deepEqual(result.animatedLayoutProperties, []);
   return result;
 }
 
@@ -105,7 +121,7 @@ const distinct = (profile, property) =>
 try {
   const state = await prepare(page);
   const preset = await profile("Interrupted preset spring", ".preset-highlight", async () => {
-    await page.getByRole("button", { name: "Quest Pollen", exact: true }).click();
+    await page.getByRole("button", { name: "Standard models", exact: true }).click();
     await page.waitForTimeout(100);
     await page.getByRole("button", { name: "All models", exact: true }).click();
     await page.waitForTimeout(100);
@@ -113,10 +129,82 @@ try {
   });
   assert(distinct(preset, "x") > 4);
   assert(distinct(preset, "width") > 4);
-  const guide = await profile("Guide height spring", "#how .disclosure-body", () =>
+  assert(distinct(preset, "layoutWidth") <= 3);
+  const roster = await profile("Extra models transform spring", "#extra-models", () =>
+    page.locator(".more-models-button").click(),
+  );
+  assert(distinct(roster, "transform") > 4);
+  assert.equal(distinct(roster, "layoutHeight"), 1);
+  const follow = await profile(
+    "Results follow drawer through position projection",
+    "#results",
+    () => page.locator(".more-models-button").click(),
+  );
+  assert(distinct(follow, "transform") > 4);
+  assert.equal(distinct(follow, "layoutHeight"), 1);
+  await page.locator("#extra-models").waitFor({ state: "detached" });
+  const toggle = page.locator(".model-toggle").first();
+  const toggleHover = await profile("Model toggle hover spring", ".model-toggle", () =>
+    toggle.hover(),
+  );
+  assert(distinct(toggleHover, "transform") > 4);
+  assert.equal(distinct(toggleHover, "layoutHeight"), 1);
+  const tap = await profile(
+    "Model toggle press and checkmark spring",
+    ".selection-check",
+    async () => {
+      await toggle.click();
+      await page.waitForTimeout(100);
+      await toggle.click();
+    },
+  );
+  assert(distinct(tap, "transform") > 4);
+  await page.mouse.move(10, 100);
+  const dice = await profile("Interrupted surprise dice roll", ".surprise-button svg", async () => {
+    await page.getByRole("button", { name: "Surprise me", exact: true }).click();
+    await page.waitForTimeout(100);
+    await page.getByRole("button", { name: "Surprise me", exact: true }).click();
+  });
+  assert(distinct(dice, "transform") > 4);
+  const starter = page.locator(".composer-chip").first();
+  const starterHover = await profile("Starter prompt hover spring", ".composer-chip", () =>
+    starter.hover(),
+  );
+  assert(distinct(starterHover, "transform") > 4);
+  const starterTap = await profile("Starter prompt tap compression", ".composer-chip", async () => {
+    await page.mouse.down();
+    await page.waitForTimeout(180);
+    await page.mouse.up();
+  });
+  assert(distinct(starterTap, "transform") > 4);
+  assert.equal(distinct(starterTap, "layoutHeight"), 1);
+  await page.locator(".brand-link").focus();
+  await page.waitForTimeout(500);
+  const glow = await profile(
+    "Composer focus glow",
+    ".question-band",
+    () => page.getByRole("textbox", { name: "Your question", exact: true }).focus(),
+    1000,
+    "::before",
+  );
+  assert(distinct(glow, "opacity") > 4);
+  assert(distinct(glow, "transform") > 4);
+  await page.getByRole("textbox", { name: "Your question", exact: true }).blur();
+  const brand = await profile("Brand spring wobble", ".brand-symbol", () =>
+    page.locator(".brand-link").hover(),
+  );
+  assert(distinct(brand, "transform") > 4);
+  const theme = await profile("Theme icon spring flip", ".theme-icon", () =>
+    page.getByRole("button", { name: "Switch to night mode", exact: true }).click(),
+  );
+  assert(distinct(theme, "transform") > 4);
+  await page.getByRole("button", { name: "Switch to day mode", exact: true }).click();
+  await page.waitForTimeout(500);
+  const guide = await profile("Guide transform spring", "#how .disclosure-body", () =>
     page.getByRole("button", { name: "How it works", exact: true }).click(),
   );
-  assert(distinct(guide, "height") > 4);
+  assert(distinct(guide, "transform") > 4);
+  assert.equal(distinct(guide, "layoutHeight"), 1);
   const guideControl = page.locator("#how > summary");
   await profile("Interrupted guide spring", "#how .disclosure-body", async () => {
     await guideControl.focus();
@@ -150,10 +238,11 @@ try {
   assert.equal(await history.getAttribute("aria-expanded"), "false");
 
   const metrics = page.getByRole("button", { name: "Compare metrics", exact: true });
-  const metricsMotion = await profile("Metrics height spring", ".metrics-reveal", () =>
+  const metricsMotion = await profile("Metrics transform spring", ".metrics-reveal", () =>
     metrics.click(),
   );
-  assert(distinct(metricsMotion, "height") > 4);
+  assert(distinct(metricsMotion, "transform") > 4);
+  assert.equal(distinct(metricsMotion, "layoutHeight"), 1);
   await profile("Interrupted metrics spring", ".metrics-reveal", async () => {
     await metrics.focus();
     for (let index = 0; index < 3; index++) {
@@ -164,12 +253,24 @@ try {
   assert.equal(await metrics.getAttribute("aria-expanded"), "false");
 
   const card = page.locator(`article[data-model-id="${IDS[0]}"]`);
+  const copyControl = card.getByRole("button", { name: "Copy GPT-5.4 Nano answer", exact: true });
+  const copy = await profile(
+    "Copy action keyboard spring feedback",
+    `article[data-model-id="${IDS[0]}"] .action-icon`,
+    async () => {
+      await copyControl.focus();
+      await page.keyboard.down("Enter");
+      await page.waitForTimeout(180);
+      await page.keyboard.up("Enter");
+    },
+  );
+  assert(distinct(copy, "transform") > 4);
   const body = card.locator(".answer-body");
   const baseline = await body.evaluate((element) => element.getBoundingClientRect().height);
   const expand = card.getByRole("button", { name: "Expand", exact: true });
   const answer = await profile(
     "Interrupted answer expansion",
-    `article[data-model-id="${IDS[0]}"] .answer-body`,
+    `article[data-model-id="${IDS[0]}"] .answer-copy`,
     async () => {
       await expand.focus();
       for (let index = 0; index < 4; index++) {
@@ -179,7 +280,8 @@ try {
     },
     1200,
   );
-  assert(distinct(answer, "height") > 4);
+  assert(distinct(answer, "opacity") > 4);
+  assert(distinct(answer, "layoutHeight") <= 2);
   assert.equal(await body.evaluate((element) => element.getBoundingClientRect().height), baseline);
   report.checks.answerHeightRestored = baseline;
 
@@ -275,6 +377,10 @@ try {
     ["garden-pointer", () => visual.locator(".garden-scene-hero").hover()],
     ["card-hover", () => visual.locator("article h3").first().hover()],
     ["image-hover", () => visual.locator(".answer-image-trigger").hover()],
+    ["roster-drawer", () => visual.locator(".more-models-button").click()],
+    ["roster-close", () => visual.locator(".more-models-button").click()],
+    ["dice", () => visual.getByRole("button", { name: "Surprise me", exact: true }).click()],
+    ["focus", () => visual.getByRole("textbox", { name: "Your question", exact: true }).focus()],
     ["guide", () => visual.getByRole("button", { name: "How it works", exact: true }).click()],
     ["metrics", () => visual.getByRole("button", { name: "Compare metrics", exact: true }).click()],
   ];

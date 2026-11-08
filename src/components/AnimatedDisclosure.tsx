@@ -1,6 +1,7 @@
 import { AnimatePresence, useIsPresent } from "motion/react";
 import * as m from "motion/react-m";
 import { type ReactNode, useEffect, useState } from "react";
+import { SPRINGS } from "../lib/motion";
 import { useMotionSettings } from "./MotionProvider";
 
 function DisclosurePanel({
@@ -21,13 +22,17 @@ function DisclosurePanel({
       id={id}
       className={className}
       inert={!present}
-      initial={overlay ? { opacity: 0, y: -8, scale: 0.985 } : { height: 0, opacity: 0 }}
-      animate={overlay ? { opacity: 1, y: 0, scale: 1 } : { height: "auto", opacity: 1 }}
-      exit={overlay ? { opacity: 0, y: -4, scale: 0.985 } : { height: 0, opacity: 0 }}
+      initial={reduce ? false : { opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={reduce ? { opacity: 0 } : { opacity: 0, y: -4 }}
       transition={
         reduce
           ? { duration: 0 }
-          : { type: "spring", stiffness: 420, damping: 38, opacity: { duration: 0.2 } }
+          : {
+              ...SPRINGS.fluid,
+              // Let following panes move clear before revealing newly inserted reading content.
+              opacity: { duration: 0.16, delay: present && !overlay ? 0.24 : 0 },
+            }
       }
       style={{ overflow: overlay ? "visible" : "hidden", transformOrigin: "top right" }}
     >

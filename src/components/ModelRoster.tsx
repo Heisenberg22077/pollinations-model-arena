@@ -2,9 +2,10 @@ import { Check, ChevronDown, Coins, Image as ImageIcon } from "lucide-react";
 import * as m from "motion/react-m";
 import { useState } from "react";
 import type { ModelDef } from "../config";
-import { animateFeedback } from "../lib/motion";
+import { animateFeedback, SPRINGS } from "../lib/motion";
 import type { HealthStatus } from "../types";
 import { CollapsibleRegion } from "./AnimatedDisclosure";
+import { ModelLogo } from "./ModelLogo";
 import { useMotionSettings } from "./MotionProvider";
 
 function ModelToggle({
@@ -36,20 +37,18 @@ function ModelToggle({
           animateFeedback(
             event.currentTarget.querySelector(".selection-check"),
             [
-              { transform: "scale(0.92)", opacity: 0 },
+              { transform: "scale(0.6)", opacity: 0 },
               { transform: "scale(1)", opacity: 1 },
             ],
-            160,
+            undefined,
+            "bouncy",
           );
         onToggle();
       }}
       className="model-toggle"
+      data-health={health}
     >
-      <span
-        className="provider-dot"
-        style={{ background: health === "degraded" ? "#f59e0b" : model.color }}
-        aria-hidden="true"
-      />
+      <ModelLogo model={model} size="control" />
       <span className="model-toggle-name">
         <span>{model.name}</span>
         {health === "down" ? (
@@ -107,7 +106,12 @@ export function ModelRoster({
   );
 
   return (
-    <section id="roster" className="model-roster">
+    <m.section
+      id="roster"
+      className="model-roster"
+      layout={reduce ? false : "position"}
+      transition={reduce ? { duration: 0 } : SPRINGS.fluid}
+    >
       <div className="roster-toolbar">
         <div className="roster-title">
           <h2>Model lineup</h2>
@@ -117,7 +121,7 @@ export function ModelRoster({
           {(
             [
               ["core", `Core ${core.length}`],
-              ["free", "Quest Pollen"],
+              ["free", "Standard models"],
               ["all", "All models"],
             ] as const
           ).map(([preset, label]) => (
@@ -134,12 +138,10 @@ export function ModelRoster({
             >
               {activePreset === preset && (
                 <m.span
-                  layoutId="active-preset-highlight"
+                  layoutId="active-roster-preset"
                   className="preset-highlight"
                   aria-hidden="true"
-                  transition={
-                    reduce ? { duration: 0 } : { type: "spring", stiffness: 480, damping: 36 }
-                  }
+                  transition={reduce ? { duration: 0 } : SPRINGS.preset}
                 />
               )}
               <span className="preset-label">{label}</span>
@@ -184,6 +186,6 @@ export function ModelRoster({
       {Object.values(health).includes("down") ? (
         <p className="roster-notice">Models marked down are excluded automatically.</p>
       ) : null}
-    </section>
+    </m.section>
   );
 }

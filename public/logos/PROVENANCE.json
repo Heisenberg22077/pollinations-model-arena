@@ -1,0 +1,93 @@
+{
+  "repository": "lobehub/lobe-icons",
+  "revision": "ea434b96e75813517b377825e01c0df61dee8836",
+  "researchedOn": "2026-11-08",
+  "upstreamUpdatedOn": "2026-11-03",
+  "assets": [
+    {
+      "file": "openai.svg",
+      "path": "packages/static-svg/icons/openai.svg",
+      "blob": "78caf4fa20ffb0ae8ebefd74408871c11c1c7fd2",
+      "bytes": 1687,
+      "source": "https://github.com/lobehub/lobe-icons/blob/ea434b96e75813517b377825e01c0df61dee8836/packages/static-svg/icons/openai.svg"
+    },
+    {
+      "file": "deepseek-color.svg",
+      "path": "packages/static-svg/icons/deepseek-color.svg",
+      "blob": "3fc2302406e22f064f3efda71d8a7bcf0fc1dd41",
+      "bytes": 2164,
+      "source": "https://github.com/lobehub/lobe-icons/blob/ea434b96e75813517b377825e01c0df61dee8836/packages/static-svg/icons/deepseek-color.svg"
+    },
+    {
+      "file": "meta-color.svg",
+      "path": "packages/static-svg/icons/meta-color.svg",
+      "blob": "a8a8d94850914671505bdedd0eb36e4deaf6ff73",
+      "bytes": 6022,
+      "source": "https://github.com/lobehub/lobe-icons/blob/ea434b96e75813517b377825e01c0df61dee8836/packages/static-svg/icons/meta-color.svg"
+    },
+    {
+      "file": "grok.svg",
+      "path": "packages/static-svg/icons/grok.svg",
+      "blob": "efb1a6183cbd9d1b68471805dc6c663e2a6fd7ff",
+      "bytes": 756,
+      "source": "https://github.com/lobehub/lobe-icons/blob/ea434b96e75813517b377825e01c0df61dee8836/packages/static-svg/icons/grok.svg"
+    },
+    {
+      "file": "zai.svg",
+      "path": "packages/static-svg/icons/zai.svg",
+      "blob": "04ba2d985f254f9f0fb05c2090f64d73264aebe9",
+      "bytes": 319,
+      "source": "https://github.com/lobehub/lobe-icons/blob/ea434b96e75813517b377825e01c0df61dee8836/packages/static-svg/icons/zai.svg"
+    },
+    {
+      "file": "bfl.svg",
+      "path": "packages/static-svg/icons/bfl.svg",
+      "blob": "3a1bfa99c375a9f75e5ca433b8d716f50ce52b66",
+      "bytes": 387,
+      "source": "https://github.com/lobehub/lobe-icons/blob/ea434b96e75813517b377825e01c0df61dee8836/packages/static-svg/icons/bfl.svg"
+    },
+    {
+      "file": "nvidia-color.svg",
+      "path": "packages/static-svg/icons/nvidia-color.svg",
+      "blob": "a9683c2e00dda9d92ce91ead02aab068919c22cc",
+      "bytes": 1025,
+      "source": "https://github.com/lobehub/lobe-icons/blob/ea434b96e75813517b377825e01c0df61dee8836/packages/static-svg/icons/nvidia-color.svg"
+    },
+    {
+      "file": "minimax-color.svg",
+      "path": "packages/static-svg/icons/minimax-color.svg",
+      "blob": "beb7adb86ec70eb994e17e95fbae1a08ef70c31d",
+      "bytes": 1570,
+      "source": "https://github.com/lobehub/lobe-icons/blob/ea434b96e75813517b377825e01c0df61dee8836/packages/static-svg/icons/minimax-color.svg"
+    },
+    {
+      "file": "claude-color.svg",
+      "path": "packages/static-svg/icons/claude-color.svg",
+      "blob": "62dc0db12dafd49c6232d9275c671237dea6a10a",
+      "bytes": 1696,
+      "source": "https://github.com/lobehub/lobe-icons/blob/ea434b96e75813517b377825e01c0df61dee8836/packages/static-svg/icons/claude-color.svg"
+    },
+    {
+      "file": "qwen-color.svg",
+      "path": "packages/static-svg/icons/qwen-color.svg",
+      "blob": "93d3311ac9caa6ab8d1887921922e0883daeec1c",
+      "bytes": 1016,
+      "source": "https://github.com/lobehub/lobe-icons/blob/ea434b96e75813517b377825e01c0df61dee8836/packages/static-svg/icons/qwen-color.svg"
+    },
+    {
+      "file": "gemini-color.svg",
+      "path": "packages/static-svg/icons/gemini-color.svg",
+      "blob": "62681dfa7cf3db2940b527ed3cbcee7bacbb1b9b",
+      "bytes": 2836,
+      "source": "https://github.com/lobehub/lobe-icons/blob/ea434b96e75813517b377825e01c0df61dee8836/packages/static-svg/icons/gemini-color.svg"
+    },
+    {
+      "file": "mistral-small-4.svg",
+      "source": "https://mistral.ai/cms-media/api/media/file/Icon-Model-Small.svg",
+      "brandGuide": "https://mistral.ai/brand/",
+      "bytes": 3990,
+      "sha256": "78b9493bad8d43470522c0e69b7d0ddbf7763f4f78fd5636f2da78e8e0ae1cf1",
+      "blob": "d70b78d9e23147f888312682389dbc3c0a03d69c"
+    }
+  ]
+}

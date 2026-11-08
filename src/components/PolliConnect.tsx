@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { APP_KEY, CONNECT_BUDGET, CONNECT_EXPIRY, QUEST_URL, REPO_URL } from "../config";
+import { APP_KEY, CONNECT_BUDGET, CONNECT_EXPIRY, REPO_URL } from "../config";
 
 type ConnectElement = HTMLElement & { apiKey?: string | null };
 
@@ -28,10 +28,7 @@ export function PolliConnect({ onKey }: { onKey: (key: string | null) => void })
     };
   }, [onKey]);
 
-  const menuLinks = JSON.stringify([
-    { label: "Source on GitHub", href: REPO_URL, icon: "app" },
-    { label: "Quest #19183", href: QUEST_URL, icon: "bug" },
-  ]);
+  const menuLinks = JSON.stringify([{ label: "Source on GitHub", href: REPO_URL, icon: "app" }]);
 
   return (
     <polli-connect

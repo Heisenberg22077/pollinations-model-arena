@@ -63,7 +63,7 @@ test("keeps Run visible with the full lineup and guide, and compares real metric
   await page.getByRole("button", { name: "Core 6", exact: true }).click();
   await page.keyboard.press("Control+Enter");
   await expect(page.locator('article[data-status="done"]')).toHaveCount(6);
-  const imageCard = page.locator("article").filter({ has: page.locator("img") });
+  const imageCard = page.locator("article").filter({ has: page.locator(".answer-image img") });
   const imageTrigger = imageCard.getByRole("button", { name: "Expand", exact: true });
   const previewHeight = (await imageCard.locator(".answer-image img").boundingBox())?.height ?? 0;
   await imageTrigger.click();
@@ -109,8 +109,16 @@ test("brings phone users to their answers and keeps the Run action in view", asy
   await expect.poll(async () => (await results.boundingBox())?.y ?? 999).toBeLessThanOrEqual(90);
   await expect(page.locator('article[data-status="done"]')).toHaveCount(6);
   await expect(page.getByRole("button", { name: "Run the table", exact: true })).toBeInViewport({
-    ratio: 1,
+    ratio: 0.99,
   });
+  const runBounds = await page
+    .getByRole("button", { name: "Run the table", exact: true })
+    .boundingBox();
+  expect(runBounds).not.toBeNull();
+  expect(runBounds?.x).toBeGreaterThanOrEqual(0);
+  expect(runBounds?.y).toBeGreaterThanOrEqual(0);
+  expect((runBounds?.x ?? 0) + (runBounds?.width ?? 0)).toBeLessThanOrEqual(390);
+  expect((runBounds?.y ?? 0) + (runBounds?.height ?? 0)).toBeLessThanOrEqual(844);
   expect(state.consoleErrors).toEqual([]);
   expect(state.pageErrors).toEqual([]);
   expect(await page.evaluate(() => window.__unhandledRejections)).toEqual([]);

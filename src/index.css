@@ -38,13 +38,96 @@
   --accent-contrast: 39 33 23;
   --accent-ink: 118 81 2;
   --orange: 164 46 27;
-  --ui-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Live Jake Archibald / Adam Argyle generator output; inputs in docs/spring-motion.md. */
+  --spring-snappy: linear(
+    0,
+    0.007,
+    0.029,
+    0.066,
+    0.119 5%,
+    0.236 7.6%,
+    0.627 15.2%,
+    0.737,
+    0.827,
+    0.902,
+    0.962,
+    1.008,
+    1.042 30%,
+    1.057,
+    1.067,
+    1.072,
+    1.073 38%,
+    1.064 42.7%,
+    1.016 56.2%,
+    1 64.4%,
+    0.995 74.6%,
+    1
+  );
+  --spring-fluid: linear(
+    0,
+    0.006,
+    0.023 2.3%,
+    0.092,
+    0.182 7.7%,
+    0.511 16.4%,
+    0.61,
+    0.694,
+    0.766,
+    0.826,
+    0.876,
+    0.916 35.1%,
+    0.947 38.8%,
+    0.971 42.9%,
+    0.987 47.5%,
+    0.997 52.8%,
+    1.002 57.9%,
+    1.004 64.3%,
+    1
+  );
+  --spring-bouncy: linear(
+    0,
+    0.009,
+    0.035 2.1%,
+    0.141,
+    0.281 6.7%,
+    0.723 12.9%,
+    0.938 16.7%,
+    1.017,
+    1.077,
+    1.121,
+    1.149 24.3%,
+    1.159,
+    1.163,
+    1.161,
+    1.154 29.9%,
+    1.129 32.8%,
+    1.051 39.6%,
+    1.017 43.1%,
+    0.991,
+    0.977 51%,
+    0.974 53.8%,
+    0.975 57.1%,
+    0.997 69.8%,
+    1.003 76.9%,
+    1.004 83.8%,
+    1
+  );
+  /* Playback times are deliberately shorter than the solver's settling times. */
+  --spring-snappy-duration: 300ms;
+  --spring-fluid-duration: 420ms;
+  --spring-bouncy-duration: 380ms;
+  --ui-ease: ease-out;
   --polli-font-body: "Geist Sans", system-ui, sans-serif;
   --polli-font-heading: "Geist Sans", system-ui, sans-serif;
   --polli-font-subheading: "Geist Sans", system-ui, sans-serif;
   --polli-font-pixel: "Geist Mono", monospace;
   color-scheme: light;
   font-synthesis: none;
+}
+@supports (animation-timing-function: linear(0, 1)) {
+  :root {
+    --ui-ease: var(--spring-fluid);
+  }
 }
 :root[data-color-mode="night"] {
   --ink: 233 226 212;
@@ -125,12 +208,16 @@ button {
   place-items: center;
   background: rgb(var(--foreground));
   color: rgb(var(--raised));
+  transition: transform var(--spring-bouncy-duration) var(--ui-ease);
 }
 .brand-wordmark {
   font-family: "Geist Pixel", monospace;
   font-size: 28px;
   line-height: 1;
   word-spacing: 0.08em;
+}
+.action-icon {
+  display: inline-flex;
 }
 .main-navigation {
   display: flex;
@@ -424,8 +511,22 @@ button {
   background: rgb(var(--input));
   box-shadow: 4px 4px 0 rgb(var(--shadow) / 0.14);
 }
-.question-band:focus-within {
-  box-shadow: 4px 4px 0 rgb(var(--shadow) / 0.45);
+.question-band::before {
+  position: absolute;
+  inset: -1px;
+  content: "";
+  border: 1px solid rgb(var(--accent-ink) / 0.55);
+  box-shadow: 0 0 20px 2px rgb(var(--accent) / 0.18);
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.99);
+  transition:
+    transform var(--spring-fluid-duration) var(--ui-ease),
+    opacity 180ms ease-out;
+}
+.question-band:focus-within::before {
+  opacity: 1;
+  transform: scale(1);
 }
 .question-label-row {
   display: flex;
@@ -625,6 +726,7 @@ button {
   min-width: 0;
   overflow-x: auto;
   overscroll-behavior-inline: contain;
+  overscroll-behavior-x: contain;
   padding-inline: 16px;
   border: 1px solid rgb(var(--line));
   background: rgb(var(--line) / 0.55);
@@ -636,7 +738,7 @@ button {
 }
 .model-toggle {
   display: flex;
-  width: 210px;
+  width: 224px;
   min-height: 44px;
   flex-shrink: 0;
   align-items: center;
@@ -647,7 +749,7 @@ button {
   text-align: left;
   scroll-snap-align: start;
   scroll-snap-stop: normal;
-  transition: transform 320ms var(--ui-ease);
+  transition: transform var(--spring-snappy-duration) var(--ui-ease);
 }
 .model-toggle[aria-pressed="true"] {
   background: rgb(var(--raised));
@@ -661,6 +763,53 @@ button {
   width: 7px;
   height: 7px;
   flex-shrink: 0;
+}
+.model-logo {
+  position: relative;
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+}
+.model-logo-control {
+  width: 18px;
+  height: 18px;
+}
+.model-logo-image,
+.model-logo-mono {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.model-logo-mono {
+  color: #000;
+  background: currentColor;
+  mask-size: contain;
+  mask-position: center;
+  mask-repeat: no-repeat;
+}
+.model-logo-illustration {
+  /* Official art occupies 104/160px; enlarge its clear space without cropping the mark. */
+  position: absolute;
+  width: 150%;
+  height: 150%;
+  max-width: none;
+}
+:root[data-color-mode="night"] .model-logo-mono {
+  color: #fff;
+}
+.model-toggle[data-health="degraded"] .model-logo::after {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 6px;
+  height: 6px;
+  content: "";
+  border: 1px solid rgb(var(--surface));
+  background: #f59e0b;
 }
 .model-toggle-name {
   display: flex;
@@ -839,7 +988,7 @@ summary[aria-expanded="true"] .guide-chevron {
   border: 1px solid rgb(var(--line));
   background: rgb(var(--raised));
   color: rgb(var(--foreground));
-  transition: translate 360ms var(--ui-ease);
+  transition: translate var(--spring-fluid-duration) var(--ui-ease);
 }
 .model-card {
   position: relative;
@@ -1092,6 +1241,10 @@ summary[aria-expanded="true"] .guide-chevron {
 }
 .status-spin {
   animation: status-spin 800ms linear infinite;
+}
+.live-status {
+  display: inline-flex;
+  animation: status-breathe 1800ms ease-in-out infinite;
 }
 .pending-pixels {
   display: flex;
@@ -1456,22 +1609,56 @@ summary:focus-visible,
   transform: scaleX(1);
 }
 
-@media (hover: hover) and (pointer: fine) {
+:where(button, a.soft-button, .nav-link, summary) {
+  transition: transform var(--spring-snappy-duration) var(--ui-ease);
+}
+@supports (animation-timing-function: linear(0, 1)) {
+  :where(button, a.soft-button, .nav-link, summary),
   .model-toggle {
-    transition-timing-function: linear(0, 0.45 15%, 0.78 30%, 1.04 55%, 1.015 75%, 1);
+    transition-timing-function: var(--spring-snappy);
+  }
+  .brand-symbol {
+    transition-timing-function: var(--spring-bouncy);
+  }
+}
+button:enabled:active,
+a.soft-button:active,
+.nav-link:active,
+summary:active {
+  transform: scale(0.96);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  button:enabled:hover,
+  a.soft-button:hover,
+  .nav-link:hover,
+  summary:hover {
+    transform: translateY(-2px) scale(1.015);
+  }
+  button:enabled:hover:active,
+  a.soft-button:hover:active,
+  .nav-link:hover:active,
+  summary:hover:active {
+    transform: scale(0.96);
+  }
+  .brand-link:hover .brand-symbol {
+    transform: rotate(-8deg) scale(1.06);
   }
   .model-toggle:hover:not(:disabled) {
-    transform: translateY(-2px);
+    transform: translateY(-2px) scale(1.015);
+  }
+  .model-toggle:hover:not(:disabled):active {
+    transform: scale(0.96);
   }
   .nav-link:hover::after {
     transform: scaleX(1);
   }
   .run-button:enabled:hover {
-    transform: translateY(-2px);
+    transform: translateY(-2px) scale(1.015);
     box-shadow: 0 5px 0 rgb(var(--shadow) / 0.2);
   }
   .run-button:enabled:active {
-    transform: translate(1px, 1px);
+    transform: scale(0.96);
     box-shadow: none;
   }
   .surprise-button:hover {
@@ -1509,7 +1696,7 @@ summary:focus-visible,
     background: rgb(var(--surface));
   }
   .model-column:hover {
-    translate: 0 -4px;
+    translate: 0 -2px;
     border-color: var(--provider-color);
     box-shadow: 0 7px 0 rgb(var(--shadow) / 0.12);
   }
@@ -1930,12 +2117,10 @@ summary:focus-visible,
   from {
     opacity: 0;
     transform: translateY(12px);
-    clip-path: inset(0 0 100% 0);
   }
   to {
     opacity: 1;
     transform: translateY(0);
-    clip-path: inset(0);
   }
 }
 @keyframes panel-open {
@@ -2015,11 +2200,23 @@ summary:focus-visible,
     transform: rotate(360deg);
   }
 }
+@keyframes status-breathe {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.95);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
 ::view-transition {
   pointer-events: none;
 }
 ::view-transition-group(root) {
-  animation-duration: 360ms;
+  /* Root snapshots share a viewport; suppress the browser's width/height interpolation. */
+  animation: none;
 }
 ::view-transition-old(root) {
   mix-blend-mode: normal;
@@ -2070,6 +2267,11 @@ summary:focus-visible,
   .image-view-hint {
     translate: none;
   }
+  :root :is(button, a.soft-button, .nav-link, summary):is(:hover, :active),
+  .brand-link:hover .brand-symbol,
+  .question-band::before {
+    transform: none;
+  }
 }
 :root[data-motion="off"] *,
 :root[data-motion="off"] *::before,
@@ -2098,4 +2300,9 @@ summary:focus-visible,
 }
 :root[data-motion="off"] .image-view-hint {
   translate: none;
+}
+:root[data-motion="off"] :is(button, a.soft-button, .nav-link, summary):is(:hover, :active),
+:root[data-motion="off"] .brand-link:hover .brand-symbol,
+:root[data-motion="off"] .question-band::before {
+  transform: none;
 }

@@ -13,16 +13,18 @@ import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from
 import type { ModelDef } from "../config";
 import { useEntrance } from "../hooks/useEntrance";
 import { formatLatency, formatPollen, formatTokens } from "../lib/format";
-import { animateFeedback } from "../lib/motion";
+import { animateFeedback, SPRINGS } from "../lib/motion";
 import type { HealthStatus, Run, Runs } from "../types";
 import { CollapsibleRegion } from "./AnimatedDisclosure";
 import { MetricsComparison } from "./MetricsComparison";
 import { ModelCard } from "./ModelCard";
+import { ModelLogo } from "./ModelLogo";
+import { useMotionSettings } from "./MotionProvider";
 
 type SortOrder = "roster" | "finish" | "latency" | "cost" | "provider";
 
 function GhostCard({ model, index }: { model: ModelDef; index: number }) {
-  const entrance = useEntrance(index);
+  const entrance = useEntrance(index, true);
   const Icon = model.kind === "image" ? ImageIcon : MessageSquare;
   return (
     <m.div
@@ -34,7 +36,7 @@ function GhostCard({ model, index }: { model: ModelDef; index: number }) {
       <header className="model-heading">
         <div className="model-provider-row">
           <p className="model-provider">
-            <span className="provider-dot" style={{ background: model.color }} aria-hidden="true" />
+            <ModelLogo model={model} />
             <span>{model.provider}</span>
           </p>
         </div>
@@ -112,6 +114,7 @@ export function ResultsPanel({
   health: Record<string, HealthStatus>;
   onClear: () => void;
 }) {
+  const { reduce } = useMotionSettings();
   const [sort, setSort] = useState<SortOrder>("roster");
   const [metricsOpen, setMetricsOpen] = useState(false);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -205,7 +208,13 @@ export function ResultsPanel({
 
   if (!lastQuestion)
     return (
-      <section id="results" className="results-surface" aria-label="Results">
+      <m.section
+        id="results"
+        className="results-surface"
+        aria-label="Results"
+        layout={reduce ? false : "position"}
+        transition={reduce ? { duration: 0 } : SPRINGS.fluid}
+      >
         <div className="results-toolbar">
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
             <h2 className="text-base font-medium">
@@ -224,11 +233,17 @@ export function ResultsPanel({
         ) : (
           <p className="my-8 text-sm text-quiet">Choose at least one model from the lineup.</p>
         )}
-      </section>
+      </m.section>
     );
 
   return (
-    <section id="results" className="results-surface" aria-label="Results">
+    <m.section
+      id="results"
+      className="results-surface"
+      aria-label="Results"
+      layout={reduce ? false : "position"}
+      transition={reduce ? { duration: 0 } : SPRINGS.fluid}
+    >
       <div className="results-toolbar">
         <div className="results-summary">
           {nextQuestion !== lastQuestion ? (
@@ -240,7 +255,7 @@ export function ResultsPanel({
           <div className="results-progress" role="status" aria-live="polite">
             <span className="inline-flex items-center gap-2 font-medium">
               <span
-                className={`h-1.5 w-1.5 ${isRunning ? "bg-accent-ink" : "bg-[#398462]"}`}
+                className={`h-1.5 w-1.5 ${isRunning ? "live-status bg-accent-ink" : "bg-[#398462]"}`}
                 aria-hidden="true"
               />
               {done.length}/{models.length} answered
@@ -292,7 +307,15 @@ export function ResultsPanel({
           </button>
           <button
             type="button"
-            onClick={copyAll}
+            onClick={(event) => {
+              animateFeedback(
+                event.currentTarget.firstElementChild,
+                [{ transform: "scale(0.8)" }, { transform: "scale(1)" }],
+                undefined,
+                "bouncy",
+              );
+              void copyAll();
+            }}
             aria-label="Copy as Markdown"
             title={
               copyState === "failed"
@@ -301,11 +324,13 @@ export function ResultsPanel({
             }
             className="soft-button result-action"
           >
-            {copyState === "copied" ? (
-              <Check className="h-3.5 w-3.5 text-accent-ink" aria-hidden="true" />
-            ) : (
-              <ClipboardCopy className="h-3.5 w-3.5" aria-hidden="true" />
-            )}
+            <span className="action-icon" aria-hidden="true">
+              {copyState === "copied" ? (
+                <Check className="h-3.5 w-3.5 text-accent-ink" aria-hidden="true" />
+              ) : (
+                <ClipboardCopy className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+            </span>
             <span className="control-label">
               {copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy"}
             </span>
@@ -342,7 +367,14 @@ export function ResultsPanel({
       <CollapsibleRegion open={metricsOpen} className="metrics-reveal">
         <MetricsComparison models={ordered} runs={runs} />
       </CollapsibleRegion>
-      <div className="comparison-grid" data-count={ordered.length} ref={gridRef}>
+      <m.div
+        className="comparison-grid"
+        data-count={ordered.length}
+        ref={gridRef}
+        layout={reduce ? false : "position"}
+        layoutDependency={metricsOpen}
+        transition={reduce ? { duration: 0 } : SPRINGS.fluid}
+      >
         {ordered.map((model) => (
           <ModelCard
             key={`${model.id}:${runs[model.id]?.queuedAt ?? 0}`}
@@ -356,7 +388,7 @@ export function ResultsPanel({
             question={lastQuestion}
           />
         ))}
-      </div>
-    </section>
+      </m.div>
+    </m.section>
   );
 }

@@ -2,13 +2,15 @@
 
 # Model Table — One Question, Every Model
 
-Ask one question and compare Pollinations models side by side. Every card shows its provider, response time, tokens and estimated Pollen cost. FLUX adds a visual interpretation. Built for [quest #19183](https://github.com/pollinations/pollinations/issues/19183).
+Ask one question and compare Pollinations models side by side. Every card shows its provider, response time, tokens and estimated Pollen cost. FLUX adds a visual interpretation.
 
-**Planned Pages URL:** https://heisenberg22077.github.io/pollinations-model-arena/
+**App URL:** https://heisenberg22077.github.io/pollinations-model-arena/
 
 ![Model Table screenshot](docs/screenshot.png)
 
 [Night mode](docs/screenshot-night.png) · [Mobile answers](docs/screenshot-mobile.png) · [Mobile composer](docs/screenshot-mobile-composer.png)
+
+Screenshots show the current interface with authored QA responses and a local garden image fixture.
 
 ## Features
 
@@ -25,13 +27,14 @@ Ask one question and compare Pollinations models side by side. Every card shows 
 - Mobile model chips, a fixed mobile Run/Stop bar, reduced-motion support, social preview artwork, and an installable manifest.
 - Large day/night pixel gardens from Pollinations, softer cream and blue surfaces, yellow actions, and locally hosted Geist Pixel, Sans and Mono fonts. The framed layout and expressive type take inspiration from dottxt.
 - Ordered page and card entrances, scroll and spring pointer movement in the artwork, card/image hover effects, spring disclosures, moving preset highlights and theme crossfades. Pause animations persists across visits; changing system reduced-motion preferences takes effect immediately.
-- Contained horizontal roster/table scrolling, 16px mobile roster edge gutters, a native shared-layout preset spring, and offscreen answer rendering with remembered card heights. Model toggles lift gently on hover; hover animations use transforms and opacity.
+- Contained horizontal roster/table scrolling, 16px mobile roster edge gutters, a native shared-layout preset spring, and offscreen answer rendering with remembered card heights. Researched CSS spring curves give buttons tap compression, buoyant hover, checkmark/copy feedback, a rolling Surprise dice and a composer focus glow. Drawers and answer expansion animate transforms/opacity while native layout changes once.
 - A desktop workbench with six answer panes at wide widths, compact starter topics, a collapsible guide, native mobile menu and keyboard navigation. The mobile Run/Stop bar stays visible; running a question on a phone brings the answers into view.
 - Thirty-six original funny Surprise me questions, informed by online research. The shuffled bank avoids repetition until exhausted; drawing a prompt spends no Pollen.
+- Current local SVG logos identify every model in selectors and cards, with intact brand colors and fixed, theme-aware icon boxes. Sources and the official Mistral Small 4 emblem are recorded in [docs/model-logos.md](docs/model-logos.md).
 
-Anthropic's frontend-design and theme-factory skills were imported and applied to this pass. Reference sources, palette, typography and design choices are recorded in [DESIGN.md](DESIGN.md). Reused assets and license notices are listed in [THIRD_PARTY.md](THIRD_PARTY.md); prompt research is in [docs/surprise-questions.md](docs/surprise-questions.md).
+Anthropic's frontend-design and theme-factory skills were imported and applied to the original design pass. Reference sources, palette, typography and design choices are recorded in [DESIGN.md](DESIGN.md). Reused assets and license notices are listed in [THIRD_PARTY.md](THIRD_PARTY.md); prompt research is in [docs/surprise-questions.md](docs/surprise-questions.md). Exact spring curves, verified Motion APIs and duration tradeoffs are documented in [docs/spring-motion.md](docs/spring-motion.md).
 
-**Quest Pollen** selects models that accept quest or paid Pollen. These calls still cost Pollen. Paid-only models can return an HTTP 200 credit notice; the app shows a top-up action instead of presenting it as an answer.
+**Standard models** selects models that are not marked paid-only. These calls still cost Pollen. Paid-only models can return an HTTP 200 credit notice; the app shows a top-up action instead of presenting it as an answer.
 
 ## Run locally
 
@@ -66,7 +69,7 @@ npm run review:frontend
 npm run review:motion
 ```
 
-These scripts save authored fixture screenshots, intermediate frames, measurements and 1920×1080 videos under ignored `.local/`. Timing samples are collected separately from capture. They are QA fixtures; the README screenshots come from actual live Pollinations requests during the initial visual pass. `npm run assets:design` refreshes the icons and social preview. `npm run assets:reference` uses read-only GitHub CLI calls to refresh the pinned artwork and provenance.
+These scripts save authored fixture screenshots, intermediate frames, measurements and 1920×1080 videos under ignored `.local/`. Timing samples are collected separately from capture. The README screenshots are selected current fixtures from this review. `npm run assets:design` refreshes the icons and social preview. `npm run assets:reference` uses read-only GitHub CLI calls to refresh the pinned artwork and provenance; `npm run assets:logos` reproduces the verified SVG logo extraction.
 
 Live checks are opt-in and use `POLLINATIONS_TEST_KEY` from the environment:
 
@@ -76,7 +79,7 @@ npm run test:e2e:live
 $env:POLLINATIONS_TEST_KEY = $null
 ```
 
-Set `POLLINATIONS_CAPTURE=1` to refresh the day, night and mobile screenshots during the core test. Set `POLLINATIONS_TEST_ALL=1` only when testing an account with quest Pollen and no paid Pollen; that optional check expects nine answers and four paid-only notices. Live test traces are disabled to keep authorization headers out of artifacts.
+Set `POLLINATIONS_CAPTURE=1` to refresh the day, night and mobile screenshots during the core test. Set `POLLINATIONS_TEST_ALL=1` only when testing a funded account without access to paid-only models; that optional check expects nine answers and four paid-only notices. Live test traces are disabled to keep authorization headers out of artifacts.
 
 ## Build and deploy
 
@@ -85,11 +88,11 @@ npm run build:pages
 npm run verify:artifact
 ```
 
-The Pages build uses `/pollinations-model-arena/` as its base and includes `404.html` for SPA deep links. The checked-in workflow validates, tests and builds on a push to `main`, verifies font/image paths, original artwork bytes and the 150,000-byte gzip JavaScript budget, then uploads and deploys the Pages artifact. The owner must create the repository and select **GitHub Actions** as the Pages source.
+The Pages build uses `/pollinations-model-arena/` as its base and includes `404.html` for SPA deep links. The checked-in workflow validates, tests and builds on a push to `main`, verifies font/image paths, original artwork and model-logo bytes and the 150,000-byte gzip JavaScript budget, then uploads and deploys the Pages artifact. This repository is configured to publish through **GitHub Actions**.
 
 For a root-domain static host, `npm run build` defaults to `/`. `VITE_BASE` can override that base. The canonical and social-preview URLs in `index.html` target the planned Pages URL; update those if choosing another host.
 
-Pollinations Sites also accepts a static `dist/` build once the owner grants the required `machines` permission. Publication and submission are owner actions.
+Pollinations Sites also accepts a static `dist/` build once the owner grants the required `machines` permission.
 
 ## Stack and privacy
 

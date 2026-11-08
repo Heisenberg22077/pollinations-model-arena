@@ -122,12 +122,14 @@ export function PromptComposer({
                 animateFeedback(
                   event.currentTarget.querySelector("svg"),
                   [
-                    { transform: "rotate(0deg)" },
-                    { transform: "rotate(-18deg)", offset: 0.28 },
-                    { transform: "rotate(25deg)", offset: 0.6 },
-                    { transform: "rotate(0deg)" },
+                    { transform: "rotate(0deg) scale(1)", offset: 0 },
+                    { transform: "rotate(-25deg) scale(1.25)", offset: 0.25 },
+                    { transform: "rotate(20deg) scale(0.95)", offset: 0.5 },
+                    { transform: "rotate(-10deg) scale(1)", offset: 0.75 },
+                    { transform: "rotate(0deg) scale(1)", offset: 1 },
                   ],
-                  240,
+                  380,
+                  "bouncy",
                 );
                 surprise();
                 animateFeedback(
@@ -136,7 +138,8 @@ export function PromptComposer({
                     { opacity: 0.5, transform: "translateY(4px)" },
                     { opacity: 1, transform: "translateY(0)" },
                   ],
-                  320,
+                  undefined,
+                  "fluid",
                 );
               }}
               className="surprise-button"

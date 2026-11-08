@@ -155,7 +155,7 @@ test("live core table settles six successful cards within 30 seconds", async ({ 
 test("live full roster handles the test account's paid-only notices", async ({ page }) => {
   test.skip(
     process.env.POLLINATIONS_TEST_ALL !== "1",
-    "Only enable this for an account with quest Pollen and no paid Pollen.",
+    "Only enable this for a funded account without access to paid-only models.",
   );
   test.setTimeout(150_000);
   await page.addInitScript(({ storage, key }) => sessionStorage.setItem(storage, key), {

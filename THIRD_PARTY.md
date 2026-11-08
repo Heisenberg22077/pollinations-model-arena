@@ -29,6 +29,12 @@ Source: [vercel/geist-font](https://github.com/vercel/geist-font/tree/ef2597cfc4
 
 Uncut Sans, LCT Mogi and Fraunces are no longer distributed or loaded.
 
+## Model and provider logos
+
+Eleven original SVG marks come from [Lobe Icons](https://github.com/lobehub/lobe-icons/tree/ea434b96e75813517b377825e01c0df61dee8836), verified on 2026-11-08 and updated on 2026-11-03. Its MIT notice is distributed in [public/logos/LOBE-ICONS-LICENSE.txt](public/logos/LOBE-ICONS-LICENSE.txt). The Mistral Small 4 SVG comes directly from [Mistral's official 2026 model/brand assets](https://mistral.ai/brand/); its original branding remains Mistral's property and is not relicensed under the collection's MIT license.
+
+All twelve original assets have source URLs and hashes in [public/logos/PROVENANCE.json](public/logos/PROVENANCE.json). [docs/model-logos.md](docs/model-logos.md) records the mapping and rendering choices; [scripts/fetch-model-logos.mjs](scripts/fetch-model-logos.mjs) reproduces extraction. Marks identify the compared services; Model Table remains an independent app.
+
 ## Libraries and references
 
 React, Motion and Lucide are MIT-licensed dependencies identified in `package.json` and its lockfile. Their original notices, including the bundled Motion helpers, are distributed in [public/licenses/LIBRARIES.txt](public/licenses/LIBRARIES.txt). Motion uses lightweight `m` components with `domMax` to enable the shared preset layout spring.

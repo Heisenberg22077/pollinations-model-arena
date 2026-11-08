@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { chromium } from "@playwright/test";
 import { CORS, delay, fulfillChat, IDS, mockApp } from "../e2e/fixtures.ts";
 
-// These are authored QA fixtures, never saved as the README's live screenshots.
+// Authored QA fixtures; selected captures can illustrate the README with explicit provenance.
 const question = "A goose becomes CEO of a startup. What is its first company-wide memo?";
 const answers = [
   "Team, we are adopting a strict bread-first strategy. Meetings move to the pond, your quarterly goals are now honk-based, and anyone who says ‘circle back’ must physically circle the lake.\n\nOur mission remains simple: find the crumbs the competition missed. No one flies south until the product ships.\n\nThe company picnic is now our largest acquisition opportunity. Legal has asked me to stop referring to customers as bread dispensers. I will review that request after lunch.\n\nPlease update your status before leaving the pond. ‘Floating’ counts as available; ‘hissing at a bicycle’ means do not disturb.",
@@ -180,6 +180,23 @@ try {
   assert(report.keyboard.dialogFocusReturned);
 
   await page.getByRole("button", { name: "Switch to night mode", exact: true }).click();
+  await page.waitForFunction(() => document.documentElement.dataset.colorMode === "night");
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  );
+  await page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every(
+        (animation) =>
+          !(
+            animation instanceof CSSAnimation &&
+            animation.animationName.startsWith("theme-") &&
+            animation.playState === "running"
+          ),
+      ),
+  );
+  await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: `${output}/desktop-night.png`, animations: "disabled" });
   await page.locator(".garden-banner").scrollIntoViewIfNeeded();
   await page.waitForTimeout(800);

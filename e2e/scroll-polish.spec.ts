@@ -52,7 +52,7 @@ test("glides a single preset highlight through interruptions, resizing and manua
   expect(motion.frames.some((left) => left > motion.start + 1 && left < motion.end - 1)).toBe(true);
   await aligned("free");
   await expect(page.getByText("9 selected", { exact: true })).toBeVisible();
-  for (const name of ["All models", "Core 6", "Quest Pollen"]) {
+  for (const name of ["All models", "Core 6", "Standard models"]) {
     await page.getByRole("button", { name, exact: true }).press("Enter");
     await page.waitForTimeout(80);
   }
@@ -145,11 +145,19 @@ test("contains mobile roster swipes with edge space and suppresses toggle hover 
   const disabled = core.getByRole("button", { name: "GPT-5.4 Nano", exact: true });
   const enabled = core.getByRole("button", { name: "DeepSeek V4.1 Flash", exact: true });
   await expect(disabled).toBeDisabled();
-  const restingTop = await enabled.evaluate((element) => element.getBoundingClientRect().top);
+  const restingHeight = await enabled.evaluate((element) => element.clientHeight);
   await enabled.hover();
   await expect
-    .poll(() => enabled.evaluate((element) => element.getBoundingClientRect().top))
-    .toBeCloseTo(restingTop - 2, 1);
+    .poll(() =>
+      enabled.evaluate((element) => new DOMMatrixReadOnly(getComputedStyle(element).transform).m42),
+    )
+    .toBeCloseTo(-2, 1);
+  expect(
+    await enabled.evaluate(
+      (element) => new DOMMatrixReadOnly(getComputedStyle(element).transform).m11,
+    ),
+  ).toBeCloseTo(1.015, 3);
+  expect(await enabled.evaluate((element) => element.clientHeight)).toBe(restingHeight);
   await disabled.hover();
   expect(await disabled.evaluate((element) => getComputedStyle(element).transform)).toBe("none");
   await page.getByRole("button", { name: "Pause animations", exact: true }).click();
