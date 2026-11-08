@@ -31,6 +31,6 @@ Uncut Sans, LCT Mogi and Fraunces are no longer distributed or loaded.
 
 ## Libraries and references
 
-React, Motion and Lucide are MIT-licensed dependencies identified in `package.json` and its lockfile. Their original notices, including the bundled Motion helpers, are distributed in [public/licenses/LIBRARIES.txt](public/licenses/LIBRARIES.txt). Motion uses `domAnimation`; drag and layout feature bundles are not required.
+React, Motion and Lucide are MIT-licensed dependencies identified in `package.json` and its lockfile. Their original notices, including the bundled Motion helpers, are distributed in [public/licenses/LIBRARIES.txt](public/licenses/LIBRARIES.txt). Motion uses lightweight `m` components with `domMax` to enable the shared preset layout spring.
 
 Pollinations, dottxt, URV AI and Anthropic's imported design skills are credited as references in [DESIGN.md](DESIGN.md). No dottxt commercial fonts, URV AI assets or skill runtime are shipped. Surprise me questions are original writing; their conceptual research sources are in [docs/surprise-questions.md](docs/surprise-questions.md).

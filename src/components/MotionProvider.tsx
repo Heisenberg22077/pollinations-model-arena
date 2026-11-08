@@ -1,4 +1,4 @@
-import { domAnimation, LazyMotion, MotionConfig } from "motion/react";
+import { domMax, LazyMotion, MotionConfig } from "motion/react";
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 
 const MOTION_STORAGE = "model-table:motion-paused";
@@ -40,7 +40,7 @@ export function MotionProvider({ children }: { children: ReactNode }) {
   }, [paused, reduce]);
 
   return (
-    <LazyMotion features={domAnimation} strict>
+    <LazyMotion features={domMax} strict>
       <MotionConfig
         reducedMotion={reduce ? "always" : "never"}
         transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 420, damping: 38 }}

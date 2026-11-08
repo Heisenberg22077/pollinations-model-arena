@@ -232,10 +232,6 @@ button {
   place-items: center;
   border: 1px solid transparent;
   color: rgb(var(--quiet));
-  transition:
-    color 140ms ease,
-    background-color 140ms ease,
-    border-color 140ms ease;
 }
 .theme-button {
   width: 36px;
@@ -265,9 +261,7 @@ button {
   color: rgb(var(--accent-contrast));
   font-family: "Geist Mono", monospace;
   font-size: 12px;
-  transition:
-    transform 320ms var(--ui-ease),
-    box-shadow 320ms var(--ui-ease);
+  transition: transform 320ms var(--ui-ease);
 }
 .run-token {
   display: grid;
@@ -429,7 +423,6 @@ button {
   border: 1px solid rgb(var(--line));
   background: rgb(var(--input));
   box-shadow: 4px 4px 0 rgb(var(--shadow) / 0.14);
-  transition: box-shadow 300ms var(--ui-ease);
 }
 .question-band:focus-within {
   box-shadow: 4px 4px 0 rgb(var(--shadow) / 0.45);
@@ -461,9 +454,6 @@ button {
   background: rgb(var(--raised));
   font-family: "Geist Mono", monospace;
   font-size: 12px;
-  transition:
-    background-color 140ms ease,
-    color 140ms ease;
 }
 .question-input {
   display: block;
@@ -517,7 +507,6 @@ button {
   text-decoration: underline;
   text-decoration-color: rgb(var(--foreground) / 0.25);
   text-underline-offset: 4px;
-  transition: background-color 140ms ease;
 }
 .recent-questions {
   position: relative;
@@ -598,16 +587,12 @@ button {
 }
 .preset-button {
   position: relative;
-  z-index: 1;
   min-height: 32px;
   padding: 5px 9px;
   border: 1px solid transparent;
   color: rgb(var(--quiet));
   font-family: "Geist Mono", monospace;
   font-size: 11px;
-  transition:
-    background-color 140ms ease,
-    color 140ms ease;
 }
 .preset-button[aria-pressed="true"] {
   border-color: rgb(var(--accent-ink) / 0.6);
@@ -615,11 +600,14 @@ button {
 }
 .preset-highlight {
   position: absolute;
-  inset-block: 0;
-  left: 0;
+  inset: 0;
   z-index: 0;
   background: rgb(var(--accent));
   pointer-events: none;
+}
+.preset-label {
+  position: relative;
+  z-index: 1;
 }
 .more-models-button {
   display: inline-flex;
@@ -636,11 +624,15 @@ button {
   display: flex;
   min-width: 0;
   overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  padding-inline: 16px;
   border: 1px solid rgb(var(--line));
   background: rgb(var(--line) / 0.55);
   gap: 1px;
   scrollbar-width: thin;
   scroll-snap-type: x proximity;
+  scroll-padding-inline: 16px;
+  scroll-snap-stop: normal;
 }
 .model-toggle {
   display: flex;
@@ -654,9 +646,8 @@ button {
   color: rgb(var(--quiet));
   text-align: left;
   scroll-snap-align: start;
-  transition:
-    background-color 140ms ease,
-    color 140ms ease;
+  scroll-snap-stop: normal;
+  transition: transform 320ms var(--ui-ease);
 }
 .model-toggle[aria-pressed="true"] {
   background: rgb(var(--raised));
@@ -819,11 +810,6 @@ summary[aria-expanded="true"] .guide-chevron {
   color: rgb(var(--foreground));
   font-size: 11px;
 }
-.soft-button {
-  transition:
-    background-color 140ms ease,
-    color 140ms ease;
-}
 .soft-button:disabled {
   cursor: not-allowed;
 }
@@ -853,15 +839,15 @@ summary[aria-expanded="true"] .guide-chevron {
   border: 1px solid rgb(var(--line));
   background: rgb(var(--raised));
   color: rgb(var(--foreground));
-  transition:
-    translate 360ms var(--ui-ease),
-    border-color 300ms ease,
-    box-shadow 360ms var(--ui-ease);
+  transition: translate 360ms var(--ui-ease);
 }
 .model-card {
   position: relative;
   min-height: 550px;
   overflow: hidden;
+  content-visibility: auto;
+  /* Remember rendered/expanded sizes; the fallback excludes the two border pixels. */
+  contain-intrinsic-size: auto 0 auto 548px;
 }
 .model-heading {
   position: relative;
@@ -869,7 +855,6 @@ summary[aria-expanded="true"] .guide-chevron {
   flex-shrink: 0;
   padding: 10px 14px 12px;
   border-bottom: 1px solid rgb(var(--foreground) / 0.18);
-  transition: background-color 300ms ease;
 }
 .model-heading::before {
   position: absolute;
@@ -879,7 +864,8 @@ summary[aria-expanded="true"] .guide-chevron {
   height: 3px;
   content: "";
   background: var(--provider-color);
-  transition: height 300ms var(--ui-ease);
+  transform-origin: top;
+  transition: transform 300ms var(--ui-ease);
 }
 .model-provider-row {
   display: flex;
@@ -1142,6 +1128,8 @@ summary[aria-expanded="true"] .guide-chevron {
 .metrics-comparison {
   margin-block: 12px;
   overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scroll-padding-inline: 16px;
   border: 1px solid rgb(var(--line));
   background: rgb(var(--raised));
   scrollbar-width: thin;
@@ -1469,6 +1457,12 @@ summary:focus-visible,
 }
 
 @media (hover: hover) and (pointer: fine) {
+  .model-toggle {
+    transition-timing-function: linear(0, 0.45 15%, 0.78 30%, 1.04 55%, 1.015 75%, 1);
+  }
+  .model-toggle:hover:not(:disabled) {
+    transform: translateY(-2px);
+  }
   .nav-link:hover::after {
     transform: scaleX(1);
   }
@@ -1523,7 +1517,7 @@ summary:focus-visible,
     background: color-mix(in srgb, var(--provider-color) 8%, rgb(var(--raised)));
   }
   .model-column:hover .model-heading::before {
-    height: 5px;
+    transform: scaleY(1.666667);
   }
   .answer-image-trigger:hover img {
     transform: scale(1.045);
@@ -1537,6 +1531,7 @@ summary:focus-visible,
 @media (min-width: 680px) {
   .roster-grid {
     display: grid;
+    padding-inline: 0;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     overflow: hidden;
   }
@@ -1879,6 +1874,7 @@ summary:focus-visible,
   }
   .model-card {
     min-height: 500px;
+    contain-intrinsic-size: auto 0 auto 498px;
   }
   .model-heading {
     min-height: 110px;
@@ -2059,7 +2055,10 @@ summary:focus-visible,
     scroll-behavior: auto;
   }
   .run-button:enabled:hover,
-  .run-button:enabled:active {
+  .run-button:enabled:active,
+  .model-toggle:hover:not(:disabled),
+  .model-column:hover .model-heading::before,
+  .nav-link:is(:hover, :focus-visible)::after {
     transform: none;
   }
   .model-column:hover {
@@ -2067,6 +2066,9 @@ summary:focus-visible,
   }
   .answer-image-trigger:hover img {
     transform: none;
+  }
+  .image-view-hint {
+    translate: none;
   }
 }
 :root[data-motion="off"] *,
@@ -2083,6 +2085,17 @@ summary:focus-visible,
 :root[data-motion="off"] .model-column:hover {
   translate: none;
 }
-:root[data-motion="off"] :is(.run-button:enabled:hover, .answer-image-trigger:hover img) {
+:root[data-motion="off"] .model-column:hover .model-heading::before,
+:root[data-motion="off"] .nav-link:is(:hover, :focus-visible)::after,
+:root[data-motion="off"]
+  :is(
+    .run-button:enabled:hover,
+    .run-button:enabled:active,
+    .model-toggle:hover:not(:disabled),
+    .answer-image-trigger:hover img
+  ) {
   transform: none;
+}
+:root[data-motion="off"] .image-view-hint {
+  translate: none;
 }

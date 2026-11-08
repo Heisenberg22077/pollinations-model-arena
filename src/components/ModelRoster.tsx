@@ -1,6 +1,6 @@
 import { Check, ChevronDown, Coins, Image as ImageIcon } from "lucide-react";
 import * as m from "motion/react-m";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useState } from "react";
 import type { ModelDef } from "../config";
 import { animateFeedback } from "../lib/motion";
 import type { HealthStatus } from "../types";
@@ -83,8 +83,6 @@ export function ModelRoster({
   onPreset: (preset: "core" | "free" | "all") => void;
 }) {
   const [open, setOpen] = useState(false);
-  const presetsRef = useRef<HTMLFieldSetElement>(null);
-  const [presetFrame, setPresetFrame] = useState<{ left: number; width: number } | null>(null);
   const { reduce } = useMotionSettings();
   const core = models.filter((model) => model.core);
   const moreFree = models.filter((model) => !model.core && !model.paidOnly);
@@ -98,29 +96,6 @@ export function ModelRoster({
     return ids.length === selectedIds.length && ids.every(selected);
   };
   const activePreset = (["core", "free", "all"] as const).find(presetActive);
-  useLayoutEffect(() => {
-    const fieldset = presetsRef.current;
-    if (!fieldset) return;
-    const measure = () => {
-      const button = fieldset.querySelector<HTMLButtonElement>(
-        `button[data-preset="${activePreset}"]`,
-      );
-      if (!button) {
-        setPresetFrame(null);
-        return;
-      }
-      const parentBox = fieldset.getBoundingClientRect();
-      const buttonBox = button.getBoundingClientRect();
-      const next = { left: buttonBox.left - parentBox.left, width: buttonBox.width };
-      setPresetFrame((previous) =>
-        previous?.left === next.left && previous.width === next.width ? previous : next,
-      );
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(fieldset);
-    return () => observer.disconnect();
-  }, [activePreset]);
   const toggle = (model: ModelDef) => (
     <ModelToggle
       key={model.id}
@@ -138,18 +113,7 @@ export function ModelRoster({
           <h2>Model lineup</h2>
           <span className="selection-count">{selectedIds.length} selected</span>
         </div>
-        <fieldset ref={presetsRef} className="roster-presets min-w-0" aria-label="Lineup presets">
-          {presetFrame ? (
-            <m.span
-              className="preset-highlight"
-              aria-hidden="true"
-              initial={false}
-              animate={{ left: presetFrame.left, width: presetFrame.width }}
-              transition={
-                reduce ? { duration: 0 } : { type: "spring", stiffness: 460, damping: 38 }
-              }
-            />
-          ) : null}
+        <fieldset className="roster-presets min-w-0" aria-label="Lineup presets">
           {(
             [
               ["core", `Core ${core.length}`],
@@ -168,6 +132,16 @@ export function ModelRoster({
               data-preset={preset}
               className="preset-button"
             >
+              {activePreset === preset && (
+                <m.span
+                  layoutId="active-preset-highlight"
+                  className="preset-highlight"
+                  aria-hidden="true"
+                  transition={
+                    reduce ? { duration: 0 } : { type: "spring", stiffness: 480, damping: 36 }
+                  }
+                />
+              )}
               <span className="preset-label">{label}</span>
             </button>
           ))}

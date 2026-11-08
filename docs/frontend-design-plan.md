@@ -59,6 +59,7 @@ Artwork is decorative brand material, separate from generated FLUX answers. Feat
 - Card hover raises the pane 4px and strengthens its provider rule and header tint. Explicit sorting refreshes opacity in place, preserving answer containment.
 - Generated images fit at rest. Hover provides bounded zoom and a view control; image click or Expand opens the native dialog. Focus containment, Escape and focus return remain intact.
 - Disclosures animate actual height, presets glide, Surprise me decodes, pending pixels reflect requests, and themes crossfade.
+- Presets now use Motion's native shared `layoutId` spring. Offscreen answer panes skip rendering with remembered intrinsic heights. Horizontal roster/table scrolling contains overscroll; mobile model rows retain 16px edge space. Toggle hover lifts 2px, and hover effects animate transforms/opacity only.
 - A persistent Pause animations control stops ambient and interaction motion; the mobile menu includes it. System reduced motion takes precedence. Both preferences apply before first paint.
 
 ## Critique

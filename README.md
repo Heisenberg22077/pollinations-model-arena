@@ -25,6 +25,7 @@ Ask one question and compare Pollinations models side by side. Every card shows 
 - Mobile model chips, a fixed mobile Run/Stop bar, reduced-motion support, social preview artwork, and an installable manifest.
 - Large day/night pixel gardens from Pollinations, softer cream and blue surfaces, yellow actions, and locally hosted Geist Pixel, Sans and Mono fonts. The framed layout and expressive type take inspiration from dottxt.
 - Ordered page and card entrances, scroll and spring pointer movement in the artwork, card/image hover effects, spring disclosures, moving preset highlights and theme crossfades. Pause animations persists across visits; changing system reduced-motion preferences takes effect immediately.
+- Contained horizontal roster/table scrolling, 16px mobile roster edge gutters, a native shared-layout preset spring, and offscreen answer rendering with remembered card heights. Model toggles lift gently on hover; hover animations use transforms and opacity.
 - A desktop workbench with six answer panes at wide widths, compact starter topics, a collapsible guide, native mobile menu and keyboard navigation. The mobile Run/Stop bar stays visible; running a question on a phone brings the answers into view.
 - Thirty-six original funny Surprise me questions, informed by online research. The shuffled bank avoids repetition until exhausted; drawing a prompt spends no Pollen.
 
@@ -65,7 +66,7 @@ npm run review:frontend
 npm run review:motion
 ```
 
-These scripts save authored fixture screenshots, intermediate frames, measurements and 1920×1080 videos under ignored `.local/`. Timing samples are collected separately from capture. They are QA fixtures; the README screenshots come from actual live Pollinations requests. `npm run assets:design` refreshes the icons and social preview. `npm run assets:reference` uses read-only GitHub CLI calls to refresh the pinned artwork and provenance.
+These scripts save authored fixture screenshots, intermediate frames, measurements and 1920×1080 videos under ignored `.local/`. Timing samples are collected separately from capture. They are QA fixtures; the README screenshots come from actual live Pollinations requests during the initial visual pass. `npm run assets:design` refreshes the icons and social preview. `npm run assets:reference` uses read-only GitHub CLI calls to refresh the pinned artwork and provenance.
 
 Live checks are opt-in and use `POLLINATIONS_TEST_KEY` from the environment:
 
@@ -92,7 +93,7 @@ Pollinations Sites also accepts a static `dist/` build once the owner grants the
 
 ## Stack and privacy
 
-Vite 6, React 19, strict TypeScript, Tailwind CSS 3 and Motion 14 with its lightweight animation feature bundle. The app uses Pollinations' OpenAI-compatible chat endpoint and image endpoint. It has no backend or analytics. Browser history contains only recent questions and metrics; authorization is managed by the official connect component.
+Vite 6, React 19, strict TypeScript, Tailwind CSS 3 and Motion 14 with lightweight `m` components and its layout-capable feature bundle. The app uses Pollinations' OpenAI-compatible chat endpoint and image endpoint. It has no backend or analytics. Browser history contains only recent questions and metrics; authorization is managed by the official connect component.
 
 ## License
 

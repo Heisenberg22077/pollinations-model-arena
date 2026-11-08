@@ -51,6 +51,10 @@ The submitted question stays attached to its comparison while the next prompt or
 
 ## Motion and interaction
 
+Horizontal model rows contain inline overscroll and use 16px scroll padding. Mobile rows also have real 16px edge gutters so the first and last models keep their spacing at the scroll limits. Snap stops remain normal; the metrics scroller also contains inline overscroll.
+
+The actual `.model-card` panes use `content-visibility: auto` and remembered intrinsic sizes. Fallback content heights are 548px on desktop and 498px on phones, accounting for borders and preserving the established 550/500px card heights. Expanded panes retain their rendered height when skipped, and focused content/native image dialogs remain usable. [web.dev's content-visibility guide](https://web.dev/articles/content-visibility) explains that the browser can "remember the last-rendered size" with `auto`.
+
 | Element       | Final behavior                                                                                                                                                                                                           |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Page arrival  | Ordered headline, artwork, composer and lineup entrance; panes reveal once on entering view, staggered by roster order.                                                                                                  |
@@ -61,7 +65,9 @@ The submitted question stays attached to its comparison while the next prompt or
 | Small signals | Preset highlight glides between selections; navigation and Surprise me decode on hover; the headline decodes every 14 seconds; prompt and pending states provide feedback.                                               |
 | Theme         | Surfaces and artwork crossfade between day and night. Theme preference persists and applies before first paint.                                                                                                          |
 
-Motion 14 uses `LazyMotion` with `domAnimation`. The larger drag/layout feature bundle is unnecessary. Transform and opacity handle artwork and hover movement; disclosures animate actual height to show the space being opened. `overflow: clip` crops artwork without introducing a nested scroll source that would break its view timeline. Browsers without timeline support retain ambient and pointer motion.
+Motion 14 uses lightweight `m` components and `LazyMotion` with `domMax`, enabling the preset's shared `layoutId` spring. The highlight lives inside the active button; manual DOM measurements and resize observers are removed. A single active preset prevents duplicate shared IDs when provider outages make preset lineups equivalent. Motion's [layout documentation](https://motion.dev/docs/react-layout-animations) states: "Motion performs all layout animations using the CSS `transform` property".
+
+Model toggles lift 2px with a spring-shaped CSS easing on fine pointers. Hover motion uses only transforms and opacity: provider rules scale instead of changing height, and color/border/shadow state changes are immediate. Disclosures still animate actual height to show the space being opened. `overflow: clip` crops artwork without introducing a nested scroll source that would break its view timeline. Browsers without timeline support retain ambient and pointer motion.
 
 The persistent **Pause animations** control is available in the desktop header and mobile menu. It and the system reduced-motion preference disable CSS, native animations, decoding and springs, including when preferences change during a session. A native media-query subscription updates the interface immediately. Both settings apply before first paint.
 

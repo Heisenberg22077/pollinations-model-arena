@@ -18,6 +18,7 @@ Requires Node.js 24. Connect using the official Pollen control, choose a lineup 
 - Large hero and closing gardens use eight original, pinned Pollinations WebP assets with day/night variants, responsive resolution, retained MIT notice and reproducible provenance.
 - Page arrivals, once-only model-pane reveals, scroll-linked artwork, pointer springs, pollen drift, card lift, contained image zoom, disclosure springs, preset movement and decoding effects provide motion throughout the page. Offscreen ambient artwork pauses.
 - Persistent pause and system reduced motion apply before first paint and react immediately to preference changes. Native scrolling and image-dialog keyboard behavior remain intact.
+- Contained horizontal scrolling has 16px edge gutters, the preset uses Motion's native shared layout spring, and offscreen panes retain their rendered sizes. Hover effects animate transforms/opacity; pause also resets provider rules and navigation hover transforms.
 - Six readable panes fit at 1920×1080. Mobile keeps Run/Stop visible, contains model-chip/table scrolling and supports the actual official account widget.
 - The comparison retains catalog pricing and health, cancellation/retries, stable submitted questions, sorting, expansion, export and local question/metric history. Surprise me has 36 original questions and spends no Pollen when drawing one.
 
@@ -25,25 +26,27 @@ Requires Node.js 24. Connect using the official Pollen control, choose a lineup 
 
 ## Validation
 
-| Check                  | Result                                                                                                                                                                                       |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| TypeScript and Biome   | Passed.                                                                                                                                                                                      |
-| Browser regressions    | 13 passed in 45.4s; two opt-in live checks skipped in the regular run. Covers pricing, retries, cancellation, layout, sorting, export, history, dialogs, disclosures and motion preferences. |
-| Fresh live core run    | 6/6 successful in 13.73s, including a real FLUX image. Reported usage matched the app's cost calculations.                                                                                   |
-| Responsive review      | Day/night and widths 320, 390, 768, 1024, 1440, 1680 and 1920px; no page overflow.                                                                                                           |
-| Actual account control | Signed-in widget/menu bounds and colors checked at 1920, 390 and 320px in both themes.                                                                                                       |
-| Motion review          | 14 profiles, including interrupted springs, hover, scrolling and the mobile menu; no recorded errors. Pause and reduced motion produced zero active animations.                              |
-| Root build             | Passed; JavaScript 128,985 bytes gzip, CSS 9,690 bytes gzip.                                                                                                                                 |
-| Pages build            | Passed; JavaScript 128,987 bytes gzip, CSS 9,702 bytes gzip.                                                                                                                                 |
-| Artifact verification  | Original hashes for all eight gardens, all three font paths, 192/512px icons, 1200×630 preview, matching `404.html` and no embedded credentials.                                             |
+| Check                                 | Result                                                                                                                                                                                        |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TypeScript and Biome                  | Passed.                                                                                                                                                                                       |
+| Browser regressions                   | 16 passed; two opt-in live checks skipped in the regular run. Includes scrolling, preset alignment, offscreen expanded answers and hover pause regressions alongside the existing app checks. |
+| Live core run (initial visual pass)   | 6/6 successful in 13.73s, including a real FLUX image. Reported usage matched the app's cost calculations.                                                                                    |
+| Responsive review                     | Day/night and widths 320, 390, 768, 1024, 1440, 1680 and 1920px; no page overflow.                                                                                                            |
+| Account control (initial visual pass) | Signed-in widget/menu bounds and colors checked at 1920, 390 and 320px in both themes.                                                                                                        |
+| Motion review                         | 14 profiles, including interrupted springs, hover, scrolling and the mobile menu; no recorded errors. Pause and reduced motion produced zero active animations.                               |
+| Root build                            | Passed; JavaScript 144,518 bytes gzip, CSS 9,774 bytes gzip.                                                                                                                                  |
+| Pages build                           | Passed; JavaScript 144,520 bytes gzip, CSS 9,785 bytes gzip.                                                                                                                                  |
+| Artifact verification                 | Original hashes for all eight gardens, all three font paths, 192/512px icons, 1200×630 preview, matching `404.html` and no embedded credentials.                                              |
 
-The application JavaScript budget is **under 150,000 bytes gzip**; the Pages build has 21,013 bytes of headroom. The Pages workflow enforces this budget and verifies published assets.
+The application JavaScript budget is **under 150,000 bytes gzip**; the Pages build has 5,480 bytes of headroom. The Pages workflow enforces this budget and verifies published assets.
 
 Motion timing used headless Chromium requestAnimationFrame samples with geometry instrumentation, separately from capture. Median intervals were approximately 16.7ms, p95 16.7–16.8ms; no sampled frame exceeded 34ms and no long tasks were observed. This confirms the recorded local run; device and browser performance can differ. No Firefox, Safari or physical-device performance claim is made. CSS scroll timelines have a feature-detected fallback.
 
+The scrolling pass was checked with authored fixtures and the regular browser suite. The live comparison and signed-in account inspection above were completed during the initial visual pass.
+
 ## Screenshot provenance and review evidence
 
-The following checked-in screenshots show actual live Pollinations answers to:
+The following checked-in screenshots from the initial visual pass show actual live Pollinations answers to:
 
 > A goose becomes CEO of a startup. What is its first company-wide memo?
 
@@ -66,7 +69,7 @@ Reproduce the ordinary checks with the commands in [README.md](README.md). `npm 
 
 ## Git and publication handoff
 
-The work is recorded as an initial local commit on `main`, authored by `Heisenberg22077 <195410802+Heisenberg22077@users.noreply.github.com>`. Intended source, configuration, documentation, screenshots, artwork and license notices are included. Private credentials, the owner's private prompt, research captures, diagnostics, dependencies, test output and builds remain ignored.
+The work is recorded in local commits on `main`, authored by `Heisenberg22077 <195410802+Heisenberg22077@users.noreply.github.com>`. Intended source, configuration, documentation, screenshots, artwork and license notices are included. Private credentials, the owner's private prompt, research captures, diagnostics, dependencies, test output and builds remain ignored.
 
 The current `dist/` contains the Pages build with base `/pollinations-model-arena/`. Planned public destinations:
 
