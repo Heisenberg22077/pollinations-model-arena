@@ -147,6 +147,14 @@ test("contains mobile roster swipes with edge space and suppresses toggle hover 
   await expect(disabled).toBeDisabled();
   const restingHeight = await enabled.evaluate((element) => element.clientHeight);
   await enabled.hover();
+  // A spring crosses its target before overshooting; sample the settled transform.
+  await expect
+    .poll(() =>
+      enabled.evaluate((element) =>
+        element.getAnimations().some((animation) => animation.playState === "running"),
+      ),
+    )
+    .toBe(false);
   await expect
     .poll(() =>
       enabled.evaluate((element) => new DOMMatrixReadOnly(getComputedStyle(element).transform).m42),
