@@ -89,7 +89,12 @@ test("keeps expanded offscreen answers stable and image dialogs usable while scr
   await card.getByRole("button", { name: "Expand", exact: true }).click();
   await expect(card.getByRole("button", { name: "Collapse", exact: true })).toBeVisible();
   await expect
-    .poll(() => card.evaluate((element) => element.getAnimations({ subtree: true }).length))
+    .poll(() =>
+      card.evaluate(
+        (element) =>
+          window.gsap?.getTweensOf(element).filter((animation) => animation.isActive()).length ?? 0,
+      ),
+    )
     .toBe(0);
   const expanded = await card.evaluate((element) => element.getBoundingClientRect().height);
   expect(expanded).toBeGreaterThan(500);
@@ -160,11 +165,25 @@ test("contains mobile roster swipes with edge space and suppresses toggle hover 
       enabled.evaluate((element) => new DOMMatrixReadOnly(getComputedStyle(element).transform).m42),
     )
     .toBeCloseTo(-2, 1);
+  // Hover owns the lift only; scale belongs to the tactile press, so a resting hover is unscaled.
   expect(
     await enabled.evaluate(
       (element) => new DOMMatrixReadOnly(getComputedStyle(element).transform).m11,
     ),
-  ).toBeCloseTo(1.015, 3);
+  ).toBeCloseTo(1, 3);
+  // Pressing squishes the control; releasing settles it back to full size.
+  await enabled.dispatchEvent("pointerdown", { button: 0, pointerType: "mouse" });
+  await expect
+    .poll(() =>
+      enabled.evaluate((element) => new DOMMatrixReadOnly(getComputedStyle(element).transform).m11),
+    )
+    .toBeLessThan(0.99);
+  await enabled.dispatchEvent("pointerup", { button: 0, pointerType: "mouse" });
+  await expect
+    .poll(() =>
+      enabled.evaluate((element) => new DOMMatrixReadOnly(getComputedStyle(element).transform).m11),
+    )
+    .toBeCloseTo(1, 2);
   expect(await enabled.evaluate((element) => element.clientHeight)).toBe(restingHeight);
   await disabled.hover();
   expect(await disabled.evaluate((element) => getComputedStyle(element).transform)).toBe("none");

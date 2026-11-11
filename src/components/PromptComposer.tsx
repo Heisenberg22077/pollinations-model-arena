@@ -1,10 +1,9 @@
 import { ChevronDown, Dices, History } from "lucide-react";
-import * as m from "motion/react-m";
 import { useLayoutEffect, useRef, useState } from "react";
 import { DEFAULT_PROMPT, MAX_PROMPT_LENGTH, type ModelDef, STARTER_PROMPTS } from "../config";
 import { SURPRISE_PROMPTS } from "../data/surpriseQuestions";
 import type { ColorMode } from "../hooks/useColorMode";
-import { useEntrance } from "../hooks/useEntrance";
+import { surprisePollen } from "../lib/arena-motion";
 import { formatLatency, formatPollen } from "../lib/format";
 import { animateFeedback } from "../lib/motion";
 import type { HealthStatus, RecentRun } from "../types";
@@ -42,11 +41,35 @@ export function PromptComposer({
   onGuideToggle: (open: boolean) => void;
   colorMode: ColorMode;
 }) {
-  const introEntrance = useEntrance(0);
-  const composerEntrance = useEntrance(2);
   const surpriseQueue = useRef<string[]>([]);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const [recentOpen, setRecentOpen] = useState(false);
+
+  // Clamp the popover to the space actually available and flip it above the
+  // summary on short landscape screens, where five long entries overflow.
+  useLayoutEffect(() => {
+    if (!recentOpen) return;
+    const details = document.getElementById("recent-questions");
+    const body = details?.querySelector<HTMLElement>(".history-popover");
+    const summary = details?.querySelector<HTMLElement>("summary");
+    if (!body || !summary) return;
+    const fit = () => {
+      const rect = summary.getBoundingClientRect();
+      const below = window.innerHeight - rect.bottom - 20;
+      const above = rect.top - 20;
+      const up = below < 180 && above > below;
+      body.classList.toggle("history-popover-up", up);
+      body.style.maxHeight = `${Math.max(120, Math.floor(up ? above : below))}px`;
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    window.addEventListener("scroll", fit, { passive: true });
+    // Keep the clamp through the closing animation; the next open re-measures.
+    return () => {
+      window.removeEventListener("resize", fit);
+      window.removeEventListener("scroll", fit);
+    };
+  }, [recentOpen]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Remeasure after React writes each prompt to the textarea.
   useLayoutEffect(() => {
@@ -79,8 +102,13 @@ export function PromptComposer({
 
   return (
     <section className="prompt-workspace" aria-label="Question and model lineup">
+      <div className="hero-aura" aria-hidden="true">
+        <span className="aura-blob aura-blob-a" />
+        <span className="aura-blob aura-blob-b" />
+      </div>
+      <canvas id="pollen-stage" tabIndex={-1} aria-hidden="true" />
       <div className="question-workbench">
-        <m.div className="workspace-intro" {...introEntrance}>
+        <div className="workspace-intro">
           <h1 className="slogan" aria-label="One Question. Every Model.">
             <span>
               <ScrambleText autoPlay duration={720}>
@@ -94,23 +122,22 @@ export function PromptComposer({
             </span>
           </h1>
           <p className="workspace-lede">
-            <span>Compare answers, speed and Pollen cost.</span>
+            <span aria-hidden="true">Compare answers, speed and Pollen cost.</span>
             <span className="model-signal" aria-hidden="true">
               {models
                 .filter((model) => selectedIds.includes(model.id))
-                .map((model, index) => (
-                  <i
-                    key={model.id}
-                    style={{ background: model.color, animationDelay: `${index * 110}ms` }}
-                  />
+                .map((model) => (
+                  <i key={model.id} style={{ background: model.color }} />
                 ))}
             </span>
+            <span className="sr-only">Compare answers, speed and Pollen cost.</span>
           </p>
-        </m.div>
+        </div>
 
         <GardenScene colorMode={colorMode} />
 
-        <m.div className="question-band" {...composerEntrance}>
+        <div className="question-band">
+          <span className="launch-shockwave" aria-hidden="true" />
           <div className="question-label-row">
             <label htmlFor="prompt">Your question</label>
             <span className="question-counter">
@@ -132,6 +159,7 @@ export function PromptComposer({
                   "bouncy",
                 );
                 surprise();
+                surprisePollen();
                 animateFeedback(
                   promptRef.current,
                   [
@@ -182,6 +210,7 @@ export function PromptComposer({
             </div>
             {history.length > 0 ? (
               <AnimatedDetails
+                id="recent-questions"
                 className="recent-questions"
                 bodyClassName="history-popover"
                 open={recentOpen}
@@ -241,7 +270,7 @@ export function PromptComposer({
               </AnimatedDetails>
             ) : null}
           </div>
-        </m.div>
+        </div>
       </div>
 
       <ModelRoster

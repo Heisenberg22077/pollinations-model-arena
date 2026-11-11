@@ -1,52 +1,12 @@
-import { AnimatePresence, useIsPresent } from "motion/react";
-import * as m from "motion/react-m";
-import { type ReactNode, useEffect, useState } from "react";
-import { SPRINGS } from "../lib/motion";
+import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
+import { refreshMotion, withMotion } from "../lib/arena-motion";
 import { useMotionSettings } from "./MotionProvider";
-
-function DisclosurePanel({
-  children,
-  id,
-  className,
-  overlay = false,
-}: {
-  children: ReactNode;
-  id?: string;
-  className?: string;
-  overlay?: boolean;
-}) {
-  const present = useIsPresent();
-  const { reduce } = useMotionSettings();
-  return (
-    <m.div
-      id={id}
-      className={className}
-      inert={!present}
-      initial={reduce ? false : { opacity: 0, y: -8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={reduce ? { opacity: 0 } : { opacity: 0, y: -4 }}
-      transition={
-        reduce
-          ? { duration: 0 }
-          : {
-              ...SPRINGS.fluid,
-              // Let following panes move clear before revealing newly inserted reading content.
-              opacity: { duration: 0.16, delay: present && !overlay ? 0.24 : 0 },
-            }
-      }
-      style={{ overflow: overlay ? "visible" : "hidden", transformOrigin: "top right" }}
-    >
-      {children}
-    </m.div>
-  );
-}
-
 export function CollapsibleRegion({
   open,
   children,
   id,
-  className,
-  overlay,
+  className = "",
+  overlay = false,
   onExitComplete,
 }: {
   open: boolean;
@@ -56,18 +16,62 @@ export function CollapsibleRegion({
   overlay?: boolean;
   onExitComplete?: () => void;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [retained, setRetained] = useState(open);
+  const { reduce } = useMotionSettings();
+  const callback = useRef(onExitComplete);
+  callback.current = onExitComplete;
+  useLayoutEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    let tween: gsap.core.Tween | undefined;
+    const finish = () => {
+      setRetained(open);
+      if (!open) callback.current?.();
+      refreshMotion();
+    };
+    if (open) setRetained(true);
+    let animated = false;
+    if (!reduce)
+      withMotion(({ gsap }) => {
+        animated = true;
+        tween = gsap.to(node, {
+          gridTemplateRows: open ? "1fr" : "0fr",
+          opacity: open ? 1 : 0,
+          duration: overlay ? 0.25 : 0.42,
+          ease: "arenaExpo",
+          overwrite: true,
+          onComplete: finish,
+        });
+        if (open)
+          gsap.fromTo(
+            node.querySelectorAll(".guide-content > *, .model-toggle, .metrics-group"),
+            { y: 8, opacity: 0 },
+            { y: 0, opacity: 1, duration: 0.35, delay: 0.12, stagger: 0.025, ease: "arenaExpo" },
+          );
+      });
+    if (!animated) {
+      node.style.gridTemplateRows = open ? "1fr" : "0fr";
+      node.style.opacity = open ? "1" : "0";
+      finish();
+    }
+    return () => {
+      tween?.kill();
+    };
+  }, [open, overlay, reduce]);
   return (
-    <AnimatePresence initial={false} onExitComplete={onExitComplete}>
-      {open ? (
-        <DisclosurePanel key="content" id={id} className={className} overlay={overlay}>
-          {children}
-        </DisclosurePanel>
-      ) : null}
-    </AnimatePresence>
+    <div
+      ref={ref}
+      id={id}
+      className={`${className} accordion-grid${overlay ? " accordion-overlay" : ""}`}
+      hidden={!open && !retained}
+      inert={!open}
+      aria-hidden={!open}
+    >
+      <div className="accordion-inner">{children}</div>
+    </div>
   );
 }
-
-/** Keep native details semantics while allowing its closing motion to finish. */
 export function AnimatedDetails({
   id,
   className,
@@ -87,14 +91,13 @@ export function AnimatedDetails({
   children: ReactNode;
   overlay?: boolean;
 }) {
-  const [retainedOpen, setRetainedOpen] = useState(open);
-  useEffect(() => {
-    if (open) setRetainedOpen(true);
+  const [retained, setRetained] = useState(open);
+  useLayoutEffect(() => {
+    if (open) setRetained(true);
   }, [open]);
-
   return (
-    <details id={id} className={className} open={open || retainedOpen}>
-      {/* biome-ignore lint/a11y/useSemanticElements: Summary is the native details control; the button role exposes its closing state. */}
+    <details id={id} className={className} open={open || retained}>
+      {/* biome-ignore lint/a11y/useSemanticElements: Native summary retains details semantics during animated closure. */}
       <summary
         role="button"
         aria-expanded={open}
@@ -109,7 +112,7 @@ export function AnimatedDetails({
         open={open}
         overlay={overlay}
         className={bodyClassName}
-        onExitComplete={() => setRetainedOpen(false)}
+        onExitComplete={() => setRetained(false)}
       >
         {children}
       </CollapsibleRegion>

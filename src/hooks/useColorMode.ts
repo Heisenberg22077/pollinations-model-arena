@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { pixelTheme } from "../lib/arena-motion";
 
 export type ColorMode = "day" | "night";
 const COLOR_MODE_STORAGE = "model-table:color-mode";
@@ -13,30 +14,14 @@ function readColorMode(): ColorMode {
 
 export function useColorMode() {
   const [colorMode, setColorMode] = useState<ColorMode>(readColorMode);
-  const transitionRef = useRef<ViewTransition | undefined>(undefined);
   const requestedModeRef = useRef(colorMode);
-
-  useEffect(() => {
-    const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const stop = () => {
-      if (preference.matches || document.documentElement.dataset.motion === "off")
-        transitionRef.current?.skipTransition();
-    };
-    preference.addEventListener("change", stop);
-    window.addEventListener("model-table:motion-change", stop);
-    return () => {
-      preference.removeEventListener("change", stop);
-      window.removeEventListener("model-table:motion-change", stop);
-      transitionRef.current?.skipTransition();
-    };
-  }, []);
 
   useEffect(() => {
     document.documentElement.dataset.colorMode = colorMode;
     document.documentElement.classList.toggle("dark", colorMode === "night");
     document
       .querySelector('meta[name="theme-color"]')
-      ?.setAttribute("content", colorMode === "day" ? "#d8cfc0" : "#161411");
+      ?.setAttribute("content", colorMode === "day" ? "#f4efe6" : "#1c1b18");
     try {
       localStorage.setItem(COLOR_MODE_STORAGE, colorMode);
     } catch {
@@ -58,17 +43,7 @@ export function useColorMode() {
         document.documentElement.classList.toggle("dark", next === "night");
         setColorMode(next);
       };
-      transitionRef.current?.skipTransition();
-      if (
-        document.startViewTransition &&
-        !window.matchMedia("(prefers-reduced-motion: reduce)").matches &&
-        document.documentElement.dataset.motion !== "off"
-      ) {
-        const transition = document.startViewTransition(apply);
-        transitionRef.current = transition;
-        void transition.ready.catch(() => {});
-        void transition.finished.catch(() => {});
-      } else apply();
+      pixelTheme(next, apply);
     },
   };
 }

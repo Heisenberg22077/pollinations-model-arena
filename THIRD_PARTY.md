@@ -37,6 +37,6 @@ All twelve original assets have source URLs and hashes in [public/logos/PROVENAN
 
 ## Libraries and references
 
-React, Motion and Lucide are MIT-licensed dependencies identified in `package.json` and its lockfile. Their original notices, including the bundled Motion helpers, are distributed in [public/licenses/LIBRARIES.txt](public/licenses/LIBRARIES.txt). Motion uses lightweight `m` components with `domMax` to enable the shared preset layout spring.
+React, React DOM, Scheduler, Lucide and Lenis 1.3.27 retain their MIT notices in [public/licenses/LIBRARIES.txt](public/licenses/LIBRARIES.txt). GSAP 3.15.1 and its Flip, ScrollTrigger, SplitText and CustomEase plugins use the [Standard no-charge license](https://gsap.com/standard-license/), reproduced in [public/licenses/GSAP-STANDARD-LICENSE.md](public/licenses/GSAP-STANDARD-LICENSE.md). The application source remains MIT; third-party code retains its own license. Motion has been removed. GSAP and Lenis load from pinned CDNs; exact development copies provide types and deterministic browser fixtures. Research and reference limitations are logged in [docs/arena-motion-research.md](docs/arena-motion-research.md).
 
 Pollinations, dottxt, URV AI and Anthropic's imported design skills are credited as references in [DESIGN.md](DESIGN.md). No dottxt commercial fonts, URV AI assets or skill runtime are shipped. Surprise me questions are original writing; their conceptual research sources are in [docs/surprise-questions.md](docs/surprise-questions.md).

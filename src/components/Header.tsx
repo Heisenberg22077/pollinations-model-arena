@@ -8,14 +8,38 @@ import {
   Square,
   Sun,
   Table2,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { useEffect } from "react";
 import { REPO_URL } from "../config";
+import { useBee } from "../hooks/useBee";
 import type { ColorMode } from "../hooks/useColorMode";
 import { animateFeedback } from "../lib/motion";
 import { useMotionSettings } from "./MotionProvider";
 import { PolliConnect } from "./PolliConnect";
 import { ScrambleText } from "./ScrambleText";
+
+function BeeGlyph({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <ellipse cx="10.5" cy="13.5" rx="5.5" ry="4" />
+      <path d="M8.5 10v7M11.5 9.7v7.6" />
+      <circle cx="17" cy="12" r="2.3" />
+      <path d="M18.2 10l1.6-2.2M16.2 9.8l.2-2.6" />
+      <path d="M7.5 10c-2.2-2.6-5-1.4-3.8 1.2M11 9.6c.2-3.2 3.2-3.6 4-1" />
+    </svg>
+  );
+}
 
 export function Header({
   apiKey,
@@ -41,7 +65,14 @@ export function Header({
   onStop: () => void;
 }) {
   const { paused, togglePaused } = useMotionSettings();
+  const { beeEnabled, soundOn, toggleBee, toggleSound } = useBee();
   const motionLabel = paused ? "Resume animations" : "Pause animations";
+  const beeLabel = beeEnabled ? "Send the bee away" : "Release the garden bee";
+  const soundLabel = soundOn ? "Mute sound" : "Unmute sound";
+  useEffect(() => {
+    const hint = document.querySelector<HTMLElement>(".connection-hint");
+    if (apiKey && hint) hint.hidden = true;
+  }, [apiKey]);
   useEffect(() => {
     const desktop = window.matchMedia("(min-width: 1024px)");
     const closeMobileMenu = () => {
@@ -139,6 +170,24 @@ export function Header({
               <Pause className="h-4 w-4" aria-hidden="true" />
             )}
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              toggleBee();
+              document.getElementById("mobile-navigation")?.hidePopover();
+            }}
+          >
+            {beeLabel}
+            <BeeGlyph className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={toggleSound}>
+            {soundLabel}
+            {soundOn ? (
+              <Volume2 className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <VolumeX className="h-4 w-4" aria-hidden="true" />
+            )}
+          </button>
         </nav>
 
         <div className="header-account">
@@ -177,10 +226,49 @@ export function Header({
               {colorMode === "day" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
             </span>
           </button>
+          <button
+            type="button"
+            onClick={(event) => {
+              animateFeedback(
+                event.currentTarget.firstElementChild,
+                [
+                  { transform: "rotate(-12deg) scale(0.8)" },
+                  { transform: "rotate(10deg) scale(1.12)" },
+                  { transform: "rotate(0deg) scale(1)" },
+                ],
+                undefined,
+                "bouncy",
+              );
+              toggleBee();
+            }}
+            aria-label={beeLabel}
+            aria-pressed={beeEnabled}
+            title={beeLabel}
+            className="icon-button bee-button"
+          >
+            <BeeGlyph className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={toggleSound}
+            aria-label={soundLabel}
+            aria-pressed={soundOn}
+            title={soundLabel}
+            className="icon-button bee-sound-button"
+          >
+            {soundOn ? (
+              <Volume2 className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <VolumeX className="h-4 w-4" aria-hidden="true" />
+            )}
+          </button>
           <PolliConnect onKey={onKey} />
         </div>
 
         <div className="table-actions">
+          <span className="connection-hint" role="status" hidden>
+            Connect Pollinations to unlock the arena
+          </span>
           <button
             type="button"
             onClick={isRunning ? onStop : onRun}
@@ -195,12 +283,14 @@ export function Header({
             </span>
             {isRunning ? "Stop the table" : "Run the table"}
             <kbd className="run-shortcut">Ctrl ↵</kbd>
+            <span className="run-glint" aria-hidden="true" />
           </button>
           <span className="mobile-connection-note">
             {apiKey ? "Your key stays in this tab." : "Connect your Pollen to run."}
           </span>
         </div>
       </div>
+      <span className="scroll-progress" aria-hidden="true" />
     </header>
   );
 }

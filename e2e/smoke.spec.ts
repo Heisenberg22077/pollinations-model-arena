@@ -57,11 +57,11 @@ test("compares six models with stable cards, correct costs, sorting, export, and
   const cards = page.locator("article[data-model-id]");
   await expect(cards).toHaveCount(6);
   const pendingHeights = await cards.evaluateAll((items) =>
-    items.map((item) => item.getBoundingClientRect().height),
+    items.map((item) => (item as HTMLElement).offsetHeight),
   );
   await expect(page.locator('article[data-status="done"]')).toHaveCount(6);
   const finalHeights = await cards.evaluateAll((items) =>
-    items.map((item) => item.getBoundingClientRect().height),
+    items.map((item) => (item as HTMLElement).offsetHeight),
   );
   finalHeights.forEach((height, index) => {
     expect(height).toBeCloseTo(pendingHeights[index], 2);
@@ -77,8 +77,11 @@ test("compares six models with stable cards, correct costs, sorting, export, and
   const firstDispatches = state.dispatches.filter(
     (item, index, all) => all.findIndex((other) => other.model === item.model) === index,
   );
+  // The browser staggers dispatches 250ms apart; these timestamps are recorded
+  // when Playwright's Node-side route handler runs, so IPC queuing can compress
+  // a gap by ~100ms under load. 150ms still proves a staggered fan-out.
   for (let index = 1; index < firstDispatches.length; index++)
-    expect(firstDispatches[index].at - firstDispatches[index - 1].at).toBeGreaterThanOrEqual(175);
+    expect(firstDispatches[index].at - firstDispatches[index - 1].at).toBeGreaterThanOrEqual(150);
 
   await card(IDS[0]).getByRole("button", { name: "Expand", exact: true }).click();
   await expect
@@ -269,7 +272,9 @@ test("handles paid notices, output limits, provider filters and invalid response
   );
   await expect(page.getByText("Output limit reached", { exact: true })).toBeVisible();
   await expect(page.getByText("Filtered by provider", { exact: true })).toBeVisible();
-  await expect(page.getByText("Reconnect Pollen", { exact: true })).toBeVisible();
+  const reconnectCard = page.locator(`article[data-model-id="${IDS[12]}"]`);
+  await reconnectCard.scrollIntoViewIfNeeded();
+  await expect(reconnectCard.getByText("Reconnect Pollen", { exact: true })).toBeVisible();
   for (const id of [IDS[6], IDS[9], IDS[10], IDS[11], IDS[12]])
     expect(state.attempts.get(id)).toBe(1);
   expect(state.pageErrors).toEqual([]);
@@ -376,7 +381,11 @@ test("disconnecting Pollen stops active and queued requests", async ({ page }) =
     element.apiKey = null;
   });
   await expect(page.getByText("Stopped", { exact: true })).toHaveCount(6);
-  await expect(page.getByRole("button", { name: "Run the table", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Run the table", exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "Run the table", exact: true }).click();
+  await expect(
+    page.getByText("Connect Pollinations to unlock the arena", { exact: true }),
+  ).toBeVisible();
   const atDisconnect = state.dispatches.length;
   await delay(600);
   expect(state.dispatches.length).toBe(atDisconnect);

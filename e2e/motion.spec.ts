@@ -12,7 +12,9 @@ test("pauses ongoing motion, remembers the choice, and follows changing system p
     .poll(() =>
       page.evaluate(
         () =>
-          document.getAnimations().filter((animation) => animation.playState === "running").length,
+          window.gsap?.globalTimeline
+            .getChildren(true, true, false)
+            .filter((animation) => animation.isActive()).length ?? 0,
       ),
     )
     .toBeGreaterThan(0);
@@ -23,7 +25,9 @@ test("pauses ongoing motion, remembers the choice, and follows changing system p
     .poll(() =>
       page.evaluate(
         () =>
-          document.getAnimations().filter((animation) => animation.playState === "running").length,
+          window.gsap?.globalTimeline
+            .getChildren(true, true, false)
+            .filter((animation) => animation.isActive()).length ?? 0,
       ),
     )
     .toBe(0);
@@ -80,9 +84,7 @@ test("opens images directly by keyboard and restores answer height after interru
   expect(await page.evaluate(() => window.__unhandledRejections)).toEqual([]);
 });
 
-test("keeps spring feedback on compositor layers and settles repeated clicks when motion stops", async ({
-  page,
-}) => {
+test("animates drawer flow and settles repeated clicks when motion stops", async ({ page }) => {
   const state = await mockApp(page);
   await page.evaluate(() => document.fonts.ready);
   const drawer = await page.evaluate(async () => {
@@ -121,14 +123,14 @@ test("keeps spring feedback on compositor layers and settles repeated clicks whe
     });
     return { heights: [...heights], transforms: [...transforms], invalid: [...invalid], overlaps };
   });
-  expect(drawer.heights).toHaveLength(1);
-  expect(drawer.transforms.length).toBeGreaterThan(4);
+  expect(drawer.heights.length).toBeGreaterThan(4);
+  expect(drawer.transforms).toEqual(["none"]);
   expect(drawer.invalid).toEqual([]);
   expect(drawer.overlaps).toEqual([]);
   const extra = page.locator("#extra-models");
   await page.locator(".more-models-button").click();
   await expect(extra).toHaveAttribute("inert", "");
-  await expect(extra).toHaveCount(0);
+  await expect(extra).not.toBeVisible();
 
   const dice = page.locator(".surprise-button svg");
   for (let index = 0; index < 4; index++) {
@@ -151,7 +153,7 @@ test("keeps spring feedback on compositor layers and settles repeated clicks whe
   await toggle.hover();
   expect(await toggle.evaluate((element) => getComputedStyle(element).transform)).toBe("none");
   await page.locator(".more-models-button").click();
-  await expect(extra).toHaveCount(0);
+  await expect(extra).not.toBeVisible();
   await page.getByRole("button", { name: "Surprise me", exact: true }).click();
   expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
   expect(state.pageErrors).toEqual([]);

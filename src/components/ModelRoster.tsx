@@ -1,12 +1,10 @@
 import { Check, ChevronDown, Coins, Image as ImageIcon } from "lucide-react";
-import * as m from "motion/react-m";
-import { useState } from "react";
+import { type CSSProperties, useState } from "react";
 import type { ModelDef } from "../config";
-import { animateFeedback, SPRINGS } from "../lib/motion";
+import { animateFeedback } from "../lib/motion";
 import type { HealthStatus } from "../types";
 import { CollapsibleRegion } from "./AnimatedDisclosure";
 import { ModelLogo } from "./ModelLogo";
-import { useMotionSettings } from "./MotionProvider";
 
 function ModelToggle({
   model,
@@ -47,6 +45,8 @@ function ModelToggle({
       }}
       className="model-toggle"
       data-health={health}
+      data-model-id={model.id}
+      style={{ "--provider-color": model.color } as CSSProperties}
     >
       <ModelLogo model={model} size="control" />
       <span className="model-toggle-name">
@@ -82,7 +82,6 @@ export function ModelRoster({
   onPreset: (preset: "core" | "free" | "all") => void;
 }) {
   const [open, setOpen] = useState(false);
-  const { reduce } = useMotionSettings();
   const core = models.filter((model) => model.core);
   const moreFree = models.filter((model) => !model.core && !model.paidOnly);
   const premium = models.filter((model) => model.paidOnly);
@@ -106,16 +105,18 @@ export function ModelRoster({
   );
 
   return (
-    <m.section
-      id="roster"
-      className="model-roster"
-      layout={reduce ? false : "position"}
-      transition={reduce ? { duration: 0 } : SPRINGS.fluid}
-    >
+    <section id="roster" className="model-roster">
       <div className="roster-toolbar">
         <div className="roster-title">
           <h2>Model lineup</h2>
-          <span className="selection-count">{selectedIds.length} selected</span>
+          <span className="selection-count">
+            <span className="count-roll">
+              <span className="count-value" key={selectedIds.length}>
+                {selectedIds.length}
+              </span>
+            </span>{" "}
+            selected
+          </span>
         </div>
         <fieldset className="roster-presets min-w-0" aria-label="Lineup presets">
           {(
@@ -137,11 +138,10 @@ export function ModelRoster({
               className="preset-button"
             >
               {activePreset === preset && (
-                <m.span
-                  layoutId="active-roster-preset"
+                <span
+                  data-flip-id="active-roster-preset"
                   className="preset-highlight"
                   aria-hidden="true"
-                  transition={reduce ? { duration: 0 } : SPRINGS.preset}
                 />
               )}
               <span className="preset-label">{label}</span>
@@ -186,6 +186,6 @@ export function ModelRoster({
       {Object.values(health).includes("down") ? (
         <p className="roster-notice">Models marked down are excluded automatically.</p>
       ) : null}
-    </m.section>
+    </section>
   );
 }

@@ -1,9 +1,5 @@
-import { useSpring } from "motion/react";
-import * as m from "motion/react-m";
-import { type CSSProperties, useEffect, useRef } from "react";
+import type { CSSProperties } from "react";
 import type { ColorMode } from "../hooks/useColorMode";
-import { useEntrance } from "../hooks/useEntrance";
-import { useMotionSettings } from "./MotionProvider";
 
 /** Original Pollinations pixels, with local composition and decorative movement. */
 export function GardenScene({
@@ -13,70 +9,14 @@ export function GardenScene({
   colorMode: ColorMode;
   closing?: boolean;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const { reduce } = useMotionSettings();
-  const entrance = useEntrance(1);
-  const x = useSpring(0, { stiffness: 95, damping: 24 });
-  const y = useSpring(0, { stiffness: 95, damping: 24 });
-  const scale = useSpring(1, { stiffness: 110, damping: 26 });
   const base = `${import.meta.env.BASE_URL}art/pollinations-${closing ? "closing" : "garden"}-${colorMode}`;
 
-  useEffect(() => {
-    if (!reduce) return;
-    x.jump(0);
-    y.jump(0);
-    scale.jump(1);
-  }, [reduce, x, y, scale]);
-
-  useEffect(() => {
-    let intersecting = false;
-    const update = () => {
-      if (ref.current) ref.current.dataset.sceneVisible = String(intersecting && !document.hidden);
-    };
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        intersecting = entry.isIntersecting;
-        update();
-      },
-      { rootMargin: "40px" },
-    );
-    const scene = ref.current;
-    if (scene) observer.observe(scene);
-    document.addEventListener("visibilitychange", update);
-    return () => {
-      observer.disconnect();
-      document.removeEventListener("visibilitychange", update);
-    };
-  }, []);
-
   return (
-    <m.div
-      ref={ref}
-      {...entrance}
+    <div
       className={`garden-scene${closing ? " garden-scene-closing" : " garden-scene-hero"}`}
       aria-hidden="true"
-      onPointerMove={(event) => {
-        if (
-          reduce ||
-          event.pointerType !== "mouse" ||
-          !window.matchMedia("(hover: hover) and (pointer: fine)").matches
-        )
-          return;
-        const rect = event.currentTarget.getBoundingClientRect();
-        x.set(((event.clientX - rect.left) / rect.width - 0.5) * 20);
-        y.set(((event.clientY - rect.top) / rect.height - 0.5) * 14);
-        scale.set(1.025);
-      }}
-      onPointerLeave={() => {
-        x.set(0);
-        y.set(0);
-        scale.set(1);
-      }}
     >
-      <m.div
-        className="garden-pointer"
-        style={{ x: reduce ? 0 : x, y: reduce ? 0 : y, scale: reduce ? 1 : scale }}
-      >
+      <div className="garden-pointer">
         <div className="garden-scroll">
           <div className="garden-drift">
             <img
@@ -102,12 +42,12 @@ export function GardenScene({
             />
           </div>
         </div>
-      </m.div>
+      </div>
       <div className="garden-pollen">
         {[0, 1, 2, 3, 4, 5].map((pixel) => (
           <span key={pixel} style={{ "--pollen": pixel } as CSSProperties} />
         ))}
       </div>
-    </m.div>
+    </div>
   );
 }

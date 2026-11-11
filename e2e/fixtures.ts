@@ -48,6 +48,7 @@ export interface ChatRequest {
 
 declare global {
   interface Window {
+    gsap?: typeof import("gsap").gsap;
     __unhandledRejections?: string[];
     __copiedMarkdown?: string;
   }
@@ -56,7 +57,7 @@ declare global {
 export function completion(model: string, extra: Record<string, unknown> = {}) {
   return {
     model: `${model}-snapshot`,
-    choices: [{ message: { content: `A useful, thoughtful answer from ${model}. `.repeat(16) } }],
+    choices: [{ message: { content: `A useful, thoughtful answer from ${model}. `.repeat(24) } }],
     usage: {
       prompt_tokens: 100,
       completion_tokens: 200,
@@ -86,6 +87,7 @@ export async function fulfillImage(route: Route) {
 export async function mockApp(
   page: Page,
   options: {
+    motion?: boolean;
     catalog?: unknown;
     connectDelayMs?: number;
     chat?: (route: Route, request: ChatRequest, attempt: number) => Promise<void>;
@@ -116,7 +118,37 @@ export async function mockApp(
       await route.continue();
       return;
     }
-    if (url.includes("/dist/connect.js")) {
+    if (
+      options.motion === false &&
+      (url.includes("/gsap@3.15.1/") || url.includes("/lenis@1.3.27/"))
+    ) {
+      await route.fulfill({ status: 204, body: "" });
+    } else if (url.includes("/gsap@3.15.1/dist/")) {
+      const filename = new URL(url).pathname.split("/").pop();
+      if (
+        !filename ||
+        ![
+          "gsap.min.js",
+          "Flip.min.js",
+          "ScrollTrigger.min.js",
+          "SplitText.min.js",
+          "CustomEase.min.js",
+        ].includes(filename)
+      )
+        throw new Error("Unexpected GSAP asset");
+      await route.fulfill({
+        path: `node_modules/gsap/dist/${filename}`,
+        contentType: "application/javascript",
+      });
+    } else if (url.includes("/lenis@1.3.27/dist/")) {
+      const filename = new URL(url).pathname.split("/").pop();
+      if (!filename || !["lenis.min.js", "lenis.css"].includes(filename))
+        throw new Error("Unexpected Lenis asset");
+      await route.fulfill({
+        path: `node_modules/lenis/dist/${filename}`,
+        contentType: filename.endsWith(".css") ? "text/css" : "application/javascript",
+      });
+    } else if (url.includes("/dist/connect.js")) {
       const body =
         "setTimeout(() => { class TestConnect extends HTMLElement {" +
         "get apiKey() { return sessionStorage.getItem('" +

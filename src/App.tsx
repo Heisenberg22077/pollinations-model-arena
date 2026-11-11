@@ -1,5 +1,4 @@
-import { LayoutGroup } from "motion/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { GardenBanner } from "./components/GardenBanner";
 import { Header } from "./components/Header";
 import { PromptComposer } from "./components/PromptComposer";
@@ -7,6 +6,14 @@ import { ResultsPanel } from "./components/ResultsPanel";
 import { STORAGE_TOKEN_KEY } from "./config";
 import { useColorMode } from "./hooks/useColorMode";
 import { useModelTable } from "./hooks/useModelTable";
+import {
+  captureLayout,
+  commitLayout,
+  connectionFeedback,
+  launchArena,
+  scrollArena,
+} from "./lib/arena-motion";
+import { armMusicGesture } from "./lib/music";
 
 function readStoredKey(): string | null {
   try {
@@ -19,23 +26,26 @@ function readStoredKey(): string | null {
 export default function App() {
   const [apiKey, setApiKey] = useState<string | null>(readStoredKey);
   const [guideOpen, setGuideOpen] = useState(false);
+  const guideRequested = useRef(false);
+  const launchRequested = useRef(false);
   const table = useModelTable();
   const { colorMode, toggleColorMode } = useColorMode();
 
+  useEffect(() => {
+    armMusicGesture();
+  }, []);
+
   const canRun =
-    Boolean(apiKey) &&
-    table.prompt.trim().length > 0 &&
-    table.selectedModels.length > 0 &&
-    !table.isRunning;
+    table.prompt.trim().length > 0 && table.selectedModels.length > 0 && !table.isRunning;
 
   const handleRun = useCallback(() => {
-    if (!apiKey) return;
-    void table.run(apiKey);
-    if (window.matchMedia("(max-width: 639px)").matches) {
-      requestAnimationFrame(() => {
-        document.getElementById("results")?.scrollIntoView({ block: "start" });
-      });
+    if (!apiKey) {
+      connectionFeedback();
+      return;
     }
+    captureLayout();
+    launchRequested.current = true;
+    void table.run(apiKey);
   }, [apiKey, table.run]);
 
   const handleKey = useCallback(
@@ -44,6 +54,13 @@ export default function App() {
       if (!key) table.stop();
     },
     [table.stop],
+  );
+
+  const handleRerun = useCallback(
+    (id: string) => {
+      if (apiKey) void table.rerunModel(id, apiKey);
+    },
+    [apiKey, table.rerunModel],
   );
 
   useEffect(() => {
@@ -61,12 +78,22 @@ export default function App() {
   }, [canRun, handleRun, table.isRunning, table.stop]);
 
   const handleOpenGuide = useCallback(() => {
+    guideRequested.current = true;
     setGuideOpen(true);
-    requestAnimationFrame(() => {
-      document.getElementById("how")?.scrollIntoView({ block: "nearest" });
-      document.querySelector<HTMLElement>("#how summary")?.focus({ preventScroll: true });
-    });
   }, []);
+
+  useLayoutEffect(() => {
+    commitLayout();
+    if (launchRequested.current) {
+      launchRequested.current = false;
+      launchArena();
+    }
+    if (guideRequested.current && guideOpen) {
+      guideRequested.current = false;
+      document.querySelector<HTMLElement>("#how summary")?.focus({ preventScroll: true });
+      scrollArena("#how", true);
+    }
+  });
 
   return (
     <div id="top" className="relative min-h-screen">
@@ -84,39 +111,42 @@ export default function App() {
       />
 
       <main id="main" tabIndex={-1} className="workspace shell">
-        <LayoutGroup>
-          <PromptComposer
-            prompt={table.prompt}
-            setPrompt={table.setPrompt}
-            selectedIds={table.selectedIds}
-            models={table.roster}
-            health={table.health}
-            history={table.history}
-            onClearHistory={table.clearHistory}
-            onToggle={table.toggleModel}
-            onPreset={(preset) => {
-              if (preset === "core") table.selectCore();
-              else if (preset === "free") table.selectFree();
-              else table.selectAll();
-            }}
-            guideOpen={guideOpen}
-            onGuideToggle={setGuideOpen}
-            colorMode={colorMode}
-          />
-          <ResultsPanel
-            models={table.resultModels}
-            runs={table.runs}
-            isRunning={table.isRunning}
-            lastQuestion={table.lastQuestion}
-            nextQuestion={table.prompt}
-            onRerun={(id) => {
-              if (apiKey) void table.rerunModel(id, apiKey);
-            }}
-            canRerun={Boolean(apiKey) && !table.isRunning}
-            health={table.health}
-            onClear={table.clear}
-          />
-        </LayoutGroup>
+        <PromptComposer
+          prompt={table.prompt}
+          setPrompt={table.setPrompt}
+          selectedIds={table.selectedIds}
+          models={table.roster}
+          health={table.health}
+          history={table.history}
+          onClearHistory={table.clearHistory}
+          onToggle={(id) => {
+            captureLayout();
+            table.toggleModel(id);
+          }}
+          onPreset={(preset) => {
+            captureLayout();
+            if (preset === "core") table.selectCore();
+            else if (preset === "free") table.selectFree();
+            else table.selectAll();
+          }}
+          guideOpen={guideOpen}
+          onGuideToggle={setGuideOpen}
+          colorMode={colorMode}
+        />
+        <ResultsPanel
+          models={table.resultModels}
+          runs={table.runs}
+          isRunning={table.isRunning}
+          lastQuestion={table.lastQuestion}
+          nextQuestion={table.prompt}
+          onRerun={handleRerun}
+          canRerun={Boolean(apiKey) && !table.isRunning}
+          health={table.health}
+          onClear={() => {
+            captureLayout();
+            table.clear();
+          }}
+        />
       </main>
 
       <footer className="site-footer relative">
@@ -141,6 +171,7 @@ export default function App() {
           </div>
         </div>
       </footer>
+      <div className="grain" aria-hidden="true" />
     </div>
   );
 }

@@ -1,3 +1,5 @@
+> Historical research for the November 8 design. The current GSAP/Lenis implementation supersedes these CSS/Motion recipes; see [arena-motion-research.md](arena-motion-research.md).
+
 # Spring motion research and implementation
 
 Live research completed on 2026-11-08 before implementation. Sources were searched and read through Firecrawl and Context7; the public curve generator was operated in a remote browser. No new runtime dependency or external animation service is required.

@@ -8,12 +8,12 @@
       name="description"
       content="Ask one question and watch OpenAI, DeepSeek, Meta, xAI, Z.ai and FLUX answer side by side. Live latency, token count and Pollen cost per model. You pay with your own Pollen."
     />
-    <meta name="theme-color" content="#d8cfc0" />
+    <meta name="theme-color" content="#f4efe6" />
     <script>
       try {
         if (localStorage.getItem("model-table:color-mode") === "night") {
           document.documentElement.dataset.colorMode = "night";
-          document.querySelector('meta[name="theme-color"]').content = "#161411";
+          document.querySelector('meta[name="theme-color"]').content = "#1c1b18";
         }
         if (
           localStorage.getItem("model-table:motion-paused") === "true" ||
@@ -52,6 +52,13 @@
       type="font/woff2"
       crossorigin
     />
+    <link rel="stylesheet" href="https://unpkg.com/lenis@1.3.27/dist/lenis.css" />
+    <script defer src="https://cdn.jsdelivr.net/npm/gsap@3.15.1/dist/gsap.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/gsap@3.15.1/dist/Flip.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/gsap@3.15.1/dist/ScrollTrigger.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/gsap@3.15.1/dist/SplitText.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/gsap@3.15.1/dist/CustomEase.min.js"></script>
+    <script defer src="https://unpkg.com/lenis@1.3.27/dist/lenis.min.js" onload="window.dispatchEvent(new Event('arena:stack-ready'))"></script>
     <script
       defer
       src="https://cdn.jsdelivr.net/npm/@pollinations/ui@0.1.0-alpha.20/dist/connect.js"

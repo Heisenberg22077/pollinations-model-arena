@@ -89,6 +89,31 @@ const report = {
   socialPreview: "1200×630",
   embeddedCredentials: 0,
 };
+// Runtime CDN payload is separate from the application bundle budget.
+const motionFiles = [
+  "gsap.min.js",
+  "Flip.min.js",
+  "ScrollTrigger.min.js",
+  "SplitText.min.js",
+  "CustomEase.min.js",
+];
+let motionCdnRawBytes = 0;
+let motionCdnGzipBytes = 0;
+for (const name of motionFiles) {
+  assert(index.includes(`https://cdn.jsdelivr.net/npm/gsap@3.15.1/dist/${name}`));
+  const data = await readFile(`node_modules/gsap/dist/${name}`);
+  motionCdnRawBytes += data.length;
+  motionCdnGzipBytes += gzipSync(data).length;
+}
+assert(index.includes("https://unpkg.com/lenis@1.3.27/dist/lenis.min.js"));
+assert(index.includes("https://unpkg.com/lenis@1.3.27/dist/lenis.css"));
+for (const name of ["lenis.min.js", "lenis.css"]) {
+  const data = await readFile(`node_modules/lenis/dist/${name}`);
+  motionCdnRawBytes += data.length;
+  motionCdnGzipBytes += gzipSync(data).length;
+}
+await readFile("dist/licenses/GSAP-STANDARD-LICENSE.md");
+Object.assign(report, { motionCdnRawBytes, motionCdnGzipBytes });
 await mkdir(".local", { recursive: true });
 await writeFile(
   `.local/artifact-${pages ? "pages" : "root"}.json`,

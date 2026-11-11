@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CORE_IDS, DEFAULT_PROMPT, MAX_PROMPT_LENGTH, MODELS, type ModelDef } from "../config";
+import { beeComment } from "../lib/arena-motion";
 import { pricingFor } from "../lib/catalog";
 import { HISTORY_KEY, readHistory, rememberRun, writeHistory } from "../lib/history";
 import { askImage, askText, imageCost, PollinationsError, textCost } from "../lib/pollinations";
@@ -81,6 +82,53 @@ export function useModelTable(): ModelTable {
     },
     [replaceRuns],
   );
+  // Simultaneous arrivals used to commit every card in one React pass, freezing
+  // low-end phones for ~1s. Space settle commits ~90ms apart; finish() waits for
+  // the queue so history and the running flag stay consistent.
+  const settleQueueRef = useRef<{ runId: number; id: string; patch: Partial<Run> }[]>([]);
+  const settleTimerRef = useRef<number | undefined>(undefined);
+  const settleWaitersRef = useRef<(() => void)[]>([]);
+  const lastSettleRef = useRef(0);
+  const flushSettle = useCallback(() => {
+    settleTimerRef.current = undefined;
+    const item = settleQueueRef.current.shift();
+    if (item) {
+      lastSettleRef.current = performance.now();
+      patchRun(item.runId, item.id, item.patch);
+    }
+    if (settleQueueRef.current.length) {
+      settleTimerRef.current = window.setTimeout(flushSettle, 90);
+    } else {
+      for (const resolve of settleWaitersRef.current.splice(0)) resolve();
+    }
+  }, [patchRun]);
+  const queueSettle = useCallback(
+    (runId: number, id: string, patch: Partial<Run>) => {
+      settleQueueRef.current.push({ runId, id, patch });
+      if (settleTimerRef.current === undefined) {
+        const wait = Math.max(0, 90 - (performance.now() - lastSettleRef.current));
+        settleTimerRef.current = window.setTimeout(flushSettle, wait);
+      }
+    },
+    [flushSettle],
+  );
+  const discardSettles = useCallback(() => {
+    settleQueueRef.current = [];
+    if (settleTimerRef.current !== undefined) {
+      clearTimeout(settleTimerRef.current);
+      settleTimerRef.current = undefined;
+    }
+    for (const resolve of settleWaitersRef.current.splice(0)) resolve();
+  }, []);
+  const settlesDrained = useCallback(
+    () =>
+      new Promise<void>((resolve) => {
+        if (!settleQueueRef.current.length && settleTimerRef.current === undefined) resolve();
+        else settleWaitersRef.current.push(resolve);
+      }),
+    [],
+  );
+  useEffect(() => discardSettles, [discardSettles]);
   const releaseImages = useCallback(() => {
     for (const url of imageUrlsRef.current.values()) URL.revokeObjectURL(url);
     imageUrlsRef.current.clear();
@@ -147,20 +195,21 @@ export function useModelTable(): ModelTable {
             cost: textCost(result.usage, pricing),
           };
         }
-        patchRun(runId, model.id, {
+        queueSettle(runId, model.id, {
           ...answer,
           status: "done",
           phase: undefined,
           latencyMs: Math.round(performance.now() - started),
           finishedAt: Date.now(),
         });
+        beeComment("response", model.name);
       } catch (error) {
         if (controller.signal.aborted || runIdRef.current !== runId) return;
         const failure =
           error instanceof PollinationsError
             ? error
             : new PollinationsError("Unexpected error while calling this model.", "api");
-        patchRun(runId, model.id, {
+        queueSettle(runId, model.id, {
           status: "error",
           phase: undefined,
           error: failure.message,
@@ -171,22 +220,25 @@ export function useModelTable(): ModelTable {
           latencyMs: started === undefined ? undefined : Math.round(performance.now() - started),
           finishedAt: Date.now(),
         });
+        beeComment("error");
       } finally {
         if (controllersRef.current.get(model.id) === controller)
           controllersRef.current.delete(model.id);
       }
     },
-    [catalog.pricing, patchRun],
+    [catalog.pricing, patchRun, queueSettle],
   );
 
   const finish = useCallback(
-    (runId: number) => {
+    async (runId: number) => {
+      await settlesDrained();
       if (runIdRef.current !== runId) return;
       busyRef.current = false;
       setIsRunning(false);
       recordHistory();
+      if (Object.keys(runsRef.current).length > 1) beeComment("compare");
     },
-    [recordHistory],
+    [recordHistory, settlesDrained],
   );
 
   const run = useCallback(
@@ -195,6 +247,7 @@ export function useModelTable(): ModelTable {
       if (!apiKey || !question || !selectedModels.length || busyRef.current) return;
       busyRef.current = true;
       const runId = ++runIdRef.current;
+      discardSettles();
       controllersRef.current.forEach((controller) => {
         controller.abort();
       });
@@ -213,6 +266,7 @@ export function useModelTable(): ModelTable {
       questionRef.current = question;
       setLastQuestion(question);
       setIsRunning(true);
+      beeComment("run");
       try {
         await Promise.allSettled(
           selectedModels.map((model, index) => runOne(runId, model, question, apiKey, index * 250)),
@@ -221,7 +275,7 @@ export function useModelTable(): ModelTable {
         finish(runId);
       }
     },
-    [finish, prompt, releaseImages, replaceRuns, runOne, selectedModels],
+    [discardSettles, finish, prompt, releaseImages, replaceRuns, runOne, selectedModels],
   );
 
   const rerunModel = useCallback(
@@ -238,6 +292,7 @@ export function useModelTable(): ModelTable {
         return;
       busyRef.current = true;
       const runId = ++runIdRef.current;
+      discardSettles();
       const previous = runsRef.current[id];
       const image = imageUrlsRef.current.get(id);
       if (image) {
@@ -255,12 +310,13 @@ export function useModelTable(): ModelTable {
         finish(runId);
       }
     },
-    [catalog.health, finish, replaceRuns, roster, runOne],
+    [catalog.health, discardSettles, finish, replaceRuns, roster, runOne],
   );
 
   const stop = useCallback(() => {
     const wasRunning = busyRef.current;
     ++runIdRef.current;
+    discardSettles();
     controllersRef.current.forEach((controller) => {
       controller.abort();
     });
@@ -283,7 +339,7 @@ export function useModelTable(): ModelTable {
     }
     replaceRuns(next);
     if (wasRunning) recordHistory();
-  }, [recordHistory, replaceRuns]);
+  }, [discardSettles, recordHistory, replaceRuns]);
   const clear = useCallback(() => {
     stop();
     releaseImages();

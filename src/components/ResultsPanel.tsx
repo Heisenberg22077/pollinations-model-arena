@@ -8,46 +8,48 @@ import {
   Table2,
   X,
 } from "lucide-react";
-import * as m from "motion/react-m";
 import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ModelDef } from "../config";
-import { useEntrance } from "../hooks/useEntrance";
+import { captureLayout, commitLayout } from "../lib/arena-motion";
 import { formatLatency, formatPollen, formatTokens } from "../lib/format";
-import { animateFeedback, SPRINGS } from "../lib/motion";
+import { animateFeedback } from "../lib/motion";
 import type { HealthStatus, Run, Runs } from "../types";
 import { CollapsibleRegion } from "./AnimatedDisclosure";
 import { MetricsComparison } from "./MetricsComparison";
 import { ModelCard } from "./ModelCard";
 import { ModelLogo } from "./ModelLogo";
-import { useMotionSettings } from "./MotionProvider";
 
 type SortOrder = "roster" | "finish" | "latency" | "cost" | "provider";
 
-function GhostCard({ model, index }: { model: ModelDef; index: number }) {
-  const entrance = useEntrance(index, true);
+function GhostCard({ model }: { model: ModelDef }) {
   const Icon = model.kind === "image" ? ImageIcon : MessageSquare;
   return (
-    <m.div
-      {...entrance}
+    <div
       data-kind={model.kind}
+      data-model-id={model.id}
+      data-flip-id={model.id}
       className="model-column ghost-card"
       style={{ "--provider-color": model.color } as CSSProperties}
     >
-      <header className="model-heading">
-        <div className="model-provider-row">
-          <p className="model-provider">
-            <ModelLogo model={model} />
-            <span>{model.provider}</span>
-          </p>
+      <div className="card-arrival">
+        <div className="card-tilt">
+          <header className="model-heading">
+            <div className="model-provider-row">
+              <p className="model-provider">
+                <ModelLogo model={model} />
+                <span>{model.provider}</span>
+              </p>
+            </div>
+            <h3>{model.name}</h3>
+            <p>{model.blurb}</p>
+          </header>
+          <div className="empty-answer">
+            <Icon className="h-5 w-5 opacity-50" aria-hidden="true" />
+            <span>{model.kind === "image" ? "An image from your question" : "Text answer"}</span>
+          </div>
         </div>
-        <h3>{model.name}</h3>
-        <p>{model.blurb}</p>
-      </header>
-      <div className="empty-answer">
-        <Icon className="h-5 w-5 opacity-50" aria-hidden="true" />
-        <span>{model.kind === "image" ? "An image from your question" : "Text answer"}</span>
       </div>
-    </m.div>
+    </div>
   );
 }
 
@@ -114,46 +116,20 @@ export function ResultsPanel({
   health: Record<string, HealthStatus>;
   onClear: () => void;
 }) {
-  const { reduce } = useMotionSettings();
   const [sort, setSort] = useState<SortOrder>("roster");
   const [metricsOpen, setMetricsOpen] = useState(false);
+  // Mount the comparison table only once opened: keeping it out of the run commit
+  // saves a 13-row table reconcile on every answer batch on slow phones.
+  const [metricsLoaded, setMetricsLoaded] = useState(false);
   const gridRef = useRef<HTMLDivElement>(null);
-  const sortRequested = useRef(false);
-  const sortAnimation = useRef<Animation | undefined>(undefined);
-
   const changeSort = (nextSort: SortOrder) => {
     if (nextSort === sort) return;
-    sortRequested.current = true;
+    captureLayout();
     setSort(nextSort);
   };
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Refresh only after an explicit sort, not each arriving answer.
   useLayoutEffect(() => {
-    if (!sortRequested.current) return;
-    sortRequested.current = false;
-    sortAnimation.current?.cancel();
-    // Moving whole answer panes overlapped their reading text. Refresh in place.
-    sortAnimation.current = animateFeedback(
-      gridRef.current,
-      [{ opacity: 0.45 }, { opacity: 1 }],
-      180,
-    );
-  }, [sort]);
-
-  useEffect(() => {
-    const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const cancel = () => {
-      sortAnimation.current?.cancel();
-    };
-    const change = () => {
-      if (preference.matches) cancel();
-    };
-    preference.addEventListener("change", change);
-    return () => {
-      preference.removeEventListener("change", change);
-      cancel();
-    };
-  }, []);
+    commitLayout();
+  });
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   useEffect(() => {
     if (copyState === "idle") return;
@@ -208,13 +184,7 @@ export function ResultsPanel({
 
   if (!lastQuestion)
     return (
-      <m.section
-        id="results"
-        className="results-surface"
-        aria-label="Results"
-        layout={reduce ? false : "position"}
-        transition={reduce ? { duration: 0 } : SPRINGS.fluid}
-      >
+      <section id="results" className="results-surface" aria-label="Results">
         <div className="results-toolbar">
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
             <h2 className="text-base font-medium">
@@ -225,25 +195,19 @@ export function ResultsPanel({
           <span className="text-xs tabular-nums text-quiet">{models.length} models</span>
         </div>
         {models.length ? (
-          <div className="comparison-grid" data-count={models.length}>
-            {models.map((model, index) => (
-              <GhostCard key={model.id} model={model} index={index} />
+          <div id="comparison-grid" className="comparison-grid" data-count={models.length}>
+            {models.map((model) => (
+              <GhostCard key={model.id} model={model} />
             ))}
           </div>
         ) : (
           <p className="my-8 text-sm text-quiet">Choose at least one model from the lineup.</p>
         )}
-      </m.section>
+      </section>
     );
 
   return (
-    <m.section
-      id="results"
-      className="results-surface"
-      aria-label="Results"
-      layout={reduce ? false : "position"}
-      transition={reduce ? { duration: 0 } : SPRINGS.fluid}
-    >
+    <section id="results" className="results-surface" aria-label="Results">
       <div className="results-toolbar">
         <div className="results-summary">
           {nextQuestion !== lastQuestion ? (
@@ -291,7 +255,10 @@ export function ResultsPanel({
           </label>
           <button
             type="button"
-            onClick={() => setMetricsOpen((open) => !open)}
+            onClick={() => {
+              setMetricsLoaded(true);
+              setMetricsOpen((open) => !open);
+            }}
             aria-expanded={metricsOpen}
             aria-controls="metrics-comparison"
             aria-label="Compare metrics"
@@ -365,15 +332,13 @@ export function ResultsPanel({
             : ""}
       </span>
       <CollapsibleRegion open={metricsOpen} className="metrics-reveal">
-        <MetricsComparison models={ordered} runs={runs} />
+        {metricsLoaded ? <MetricsComparison models={ordered} runs={runs} /> : null}
       </CollapsibleRegion>
-      <m.div
+      <div
+        id="comparison-grid"
         className="comparison-grid"
         data-count={ordered.length}
         ref={gridRef}
-        layout={reduce ? false : "position"}
-        layoutDependency={metricsOpen}
-        transition={reduce ? { duration: 0 } : SPRINGS.fluid}
       >
         {ordered.map((model) => (
           <ModelCard
@@ -388,7 +353,7 @@ export function ResultsPanel({
             question={lastQuestion}
           />
         ))}
-      </m.div>
-    </m.section>
+      </div>
+    </section>
   );
 }
