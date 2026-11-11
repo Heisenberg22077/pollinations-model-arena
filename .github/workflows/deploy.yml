@@ -33,7 +33,14 @@ jobs:
           npm run lint
           npm run typecheck
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        # Runner apt mirrors intermittently fail DNS; the image already ships
+        # Chrome's shared libraries, so install browser-only in that case.
+        run: |
+          if getent hosts archive.ubuntu.com >/dev/null 2>&1; then
+            npx playwright install --with-deps chromium
+          else
+            npx playwright install chromium
+          fi
       - name: Browser checks
         run: npm run test:e2e
       - uses: actions/configure-pages@v5
