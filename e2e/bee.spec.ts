@@ -277,7 +277,8 @@ test.describe("touch devices", () => {
       }).observe(text, { childList: true, characterData: true, subtree: true });
     });
 
-    // Tap below the bee's wander zone so feeding never accidentally starts the story.
+    // Alternate distant feeding spots: the bee pursues each fruit, so tapping
+    // the same spot again can hit it and legitimately start story mode.
     // Keep feeding across the whole window: the 5s touch gap means a burst of taps
     // correctly yields one comment, so spaced taps are what prove the pacing.
     const size = page.viewportSize();
@@ -286,7 +287,7 @@ test.describe("touch devices", () => {
       window.__feedStart = performance.now();
     });
     for (let index = 0; index < 9; index++) {
-      await page.touchscreen.tap(size.width / 2, size.height * 0.68);
+      await page.touchscreen.tap(index % 2 === 0 ? 40 : size.width - 40, size.height * 0.58);
       await page.waitForTimeout(1800);
     }
     await page.waitForFunction(() => performance.now() - (window.__feedStart ?? 0) > 18_000);
@@ -294,7 +295,8 @@ test.describe("touch devices", () => {
     const lines = await page.evaluate(() => window.__beeLines ?? []);
     expect(lines.length).toBeGreaterThanOrEqual(2);
     const allowed = new Set([...FRUIT_LINES, ...IDLE_LINES]);
-    for (const line of lines) expect(allowed.has(line.text)).toBe(true);
+    for (const line of lines)
+      expect(allowed.has(line.text), `Unexpected bee line: ${line.text}`).toBe(true);
     expect(lines.some((line) => FRUIT_LINES.includes(line.text))).toBe(true);
     for (let index = 1; index < lines.length; index++) {
       expect(lines[index].at - lines[index - 1].at).toBeGreaterThanOrEqual(3900);
