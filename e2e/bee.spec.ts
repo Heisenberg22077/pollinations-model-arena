@@ -129,7 +129,9 @@ test("fastest and cheapest badges get speed and cost commentary", async ({ page 
       await fulfillChat(route, request);
     },
     image: async (route) => {
-      await delay(80);
+      // Keep the image well behind the 60ms text winner: under CI load, timer
+      // jitter can otherwise invert an 80ms-vs-60ms latency race.
+      await delay(300);
       await fulfillImage(route);
     },
   });
