@@ -42,7 +42,13 @@ function handleError() {
     if (enabled && gestured) {
       el.preload = "auto";
       const attempt = el.play();
-      if (attempt) attempt.then(() => (playing = true)).catch(() => {});
+      if (attempt)
+        attempt
+          .then(() => {
+            playing = true;
+            disarm();
+          })
+          .catch(() => {});
     }
     return;
   }
@@ -58,6 +64,11 @@ function ensureElement(): HTMLAudioElement {
   element.preload = "none";
   element.src = sources[0];
   element.addEventListener("error", handleError);
+  // A play() refused before the codec finished loading gets one more chance as
+  // soon as the data is ready (Chrome keeps sticky activation after a tap).
+  element.addEventListener("canplay", () => {
+    if (enabled && gestured && !playing) start();
+  });
   element.setAttribute("aria-hidden", "true");
   element.style.display = "none";
   document.body.appendChild(element);
@@ -106,8 +117,19 @@ function start() {
     element.volume = TARGET;
   }
   const attempt = element.play();
-  if (attempt) attempt.then(() => (playing = true)).catch(() => {});
-  else playing = true;
+  if (attempt)
+    attempt
+      .then(() => {
+        playing = true;
+        disarm();
+      })
+      .catch(() => {
+        playing = false;
+      });
+  else {
+    playing = true;
+    disarm();
+  }
 }
 
 function stop() {
@@ -134,19 +156,27 @@ function apply() {
 
 export function setMusicEnabled(on: boolean) {
   enabled = on;
+  if (!on) disarm();
   apply();
 }
 
-const unlock = () => {
+// WebKit does not reliably accept touchstart-family events as media gestures, and
+// a first play() can be refused while the codec loads. Stay armed across gesture
+// kinds until playback actually begins, so music never needs a mute/unmute cycle.
+const GESTURE_EVENTS = ["pointerdown", "touchend", "click", "keydown"] as const;
+
+function disarm() {
+  for (const event of GESTURE_EVENTS) window.removeEventListener(event, unlock);
+}
+
+function unlock() {
   gestured = true;
   apply();
-  window.removeEventListener("pointerdown", unlock);
-  window.removeEventListener("keydown", unlock);
-};
+  if (playing || !enabled) disarm();
+}
 
 export function armMusicGesture() {
   if (armed) return;
   armed = true;
-  window.addEventListener("pointerdown", unlock, { once: true });
-  window.addEventListener("keydown", unlock, { once: true });
+  for (const event of GESTURE_EVENTS) window.addEventListener(event, unlock, { passive: true });
 }

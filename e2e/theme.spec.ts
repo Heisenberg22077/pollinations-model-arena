@@ -35,6 +35,8 @@ test("keeps answers readable in both themes, remembers the preference, and suppo
   expect(await answerContrast()).toBeGreaterThanOrEqual(4.5);
   await page.getByRole("button", { name: "Switch to night mode", exact: true }).click();
   await expect(page.getByRole("button", { name: "Switch to day mode", exact: true })).toBeVisible();
+  // Surface colors glide for 0.32s after the masked swap; assert the settled palette.
+  await expect(page.locator(".pixel-transition-grid")).toBeHidden();
   expect(await answerContrast()).toBeGreaterThanOrEqual(4.5);
   const background = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   await page.reload();
@@ -51,7 +53,9 @@ test("keeps answers readable in both themes, remembers the preference, and suppo
       .locator(".garden-scene-hero .garden-drift")
       .evaluate((scene) => getComputedStyle(scene).animationName),
   ).toBe("none");
-  await page.getByRole("button", { name: "Switch to day mode", exact: true }).click();
+  // On phones the header theme button is hidden; the switch lives in the menu.
+  await page.locator(".mobile-menu-button").click();
+  await page.locator(".mobile-navigation .menu-theme-button").click();
   await page.evaluate(() => document.fonts.ready);
   const loadedFonts = await page.evaluate(() =>
     [...document.fonts]

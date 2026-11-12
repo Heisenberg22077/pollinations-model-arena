@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { pixelTheme } from "../lib/arena-motion";
 
 export type ColorMode = "day" | "night";
@@ -16,7 +16,9 @@ export function useColorMode() {
   const [colorMode, setColorMode] = useState<ColorMode>(readColorMode);
   const requestedModeRef = useRef(colorMode);
 
-  useEffect(() => {
+  // Before first paint: a post-paint theme swap would glide the body from its
+  // initial transparent background and flash the wrong palette on reload.
+  useLayoutEffect(() => {
     document.documentElement.dataset.colorMode = colorMode;
     document.documentElement.classList.toggle("dark", colorMode === "night");
     document
@@ -31,7 +33,7 @@ export function useColorMode() {
 
   return {
     colorMode,
-    toggleColorMode: () => {
+    toggleColorMode: (origin?: { x: number; y: number }) => {
       const next = requestedModeRef.current === "day" ? "night" : "day";
       requestedModeRef.current = next;
       try {
@@ -43,7 +45,7 @@ export function useColorMode() {
         document.documentElement.classList.toggle("dark", next === "night");
         setColorMode(next);
       };
-      pixelTheme(next, apply);
+      pixelTheme(next, apply, origin);
     },
   };
 }

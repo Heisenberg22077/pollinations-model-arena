@@ -6,7 +6,12 @@ import {
   useEffect,
   useState,
 } from "react";
-import { motionStack, startChoreography, startMotionClock } from "../lib/arena-motion";
+import {
+  motionStack,
+  quiesceMotion,
+  startChoreography,
+  startMotionClock,
+} from "../lib/arena-motion";
 
 const MOTION_STORAGE = "model-table:motion-paused";
 const MotionSettings = createContext({ reduce: false, paused: false, togglePaused: () => {} });
@@ -56,6 +61,7 @@ export function MotionProvider({ children }: { children: ReactNode }) {
   useEffect(() => startMotionClock(), [ready]);
   useEffect(() => {
     document.documentElement.dataset.motion = reduce ? "off" : "on";
+    if (reduce) quiesceMotion();
     window.dispatchEvent(new Event("model-table:motion-change"));
     try {
       localStorage.setItem(MOTION_STORAGE, String(paused));
@@ -75,6 +81,7 @@ export function MotionProvider({ children }: { children: ReactNode }) {
         </div>
       </div>
       <div className="pixel-transition-grid" hidden aria-hidden="true">
+        <span className="pixel-transition-bloom" />
         <div
           className="pixel-transition-matrix"
           data-cols={curtainCols}

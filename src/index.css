@@ -991,6 +991,20 @@ summary[aria-expanded="true"] .guide-chevron {
   /* Remember rendered/expanded sizes; the fallback excludes the two border pixels. */
   contain-intrinsic-size: auto 0 auto 548px;
 }
+/* Theme surfaces glide between palettes instead of snapping when the curtain
+   is unavailable (paused motion still snaps via the data-motion off rule). */
+body,
+.site-header,
+.model-card,
+.results-surface,
+.question-band,
+.site-footer,
+.prompt-workspace {
+  transition:
+    background-color 0.32s ease,
+    border-color 0.32s ease,
+    color 0.32s ease;
+}
 .model-heading {
   position: relative;
   min-height: 90px;
@@ -1486,7 +1500,9 @@ polli-connect {
   --polli-color-bg-active: rgb(var(--accent));
 }
 .header-account polli-connect {
-  min-width: 0;
+  /* The widget's inner label never shrinks; letting the host shrink made it
+     paint over the theme button at 340-380px in the unconnected state. */
+  flex-shrink: 0;
   max-width: 250px;
 }
 .header-account polli-connect > div {
@@ -1717,6 +1733,7 @@ summary:focus-visible,
   .mobile-menu-button {
     display: inline-flex;
     min-height: 36px;
+    flex-shrink: 0;
     align-items: center;
     gap: 5px;
     margin-left: auto;
@@ -1824,8 +1841,8 @@ summary:focus-visible,
   }
   .brand-wordmark {
     font-family: "Geist Sans", sans-serif;
-    max-width: 48px;
-    font-size: 15px;
+    white-space: nowrap;
+    font-size: 14px;
     font-weight: 550;
     line-height: 1.05;
     letter-spacing: -0.04em;
@@ -1852,6 +1869,11 @@ summary:focus-visible,
     width: 32px;
     height: 44px;
     border-color: transparent;
+  }
+  /* Phones keep the theme switch in the menu so the wide unconnected Connect
+     widget always fits beside the brand without overlapping anything. */
+  .header-account .theme-button {
+    display: none;
   }
   .mobile-menu-button {
     min-height: 44px;
@@ -2311,6 +2333,12 @@ summary:focus-visible,
 .pixel-transition-grid i {
   background: currentColor;
 }
+.pixel-transition-bloom {
+  position: absolute;
+  inset: -20%;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
 .connection-hint {
   position: fixed;
   right: 24px;
@@ -2381,8 +2409,14 @@ summary:focus-visible,
   transform: none;
   opacity: 0;
 }
-.nav-link:is(:hover, :focus-visible)::after {
+.nav-link:focus-visible::after {
   opacity: 1;
+}
+/* Touch taps leave :hover stuck; the underline stays keyboard-only there. */
+@media (hover: hover) and (pointer: fine) {
+  .nav-link:hover::after {
+    opacity: 1;
+  }
 }
 @media (max-width: 639px) {
   .question-bottom-row {

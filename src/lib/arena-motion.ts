@@ -74,10 +74,8 @@ export function isBeeEnabled() {
 export function beeComment(event: BeeEvent, name?: string) {
   liveBee?.comment(event, name);
 }
-/** Context-aware hover commentary (mouse-only; the bee ignores this on touch devices). */
-export function beeHover(zone: BeeZone | null, name?: string, tag?: BeeTag) {
-  liveBee?.hover(zone, name, tag);
-}
+/** Touch-primary devices get tap equivalents and lighter tween counts; desktop keeps the full show. */
+export const coarsePointer = window.matchMedia("(pointer: coarse)");
 
 /** All application frame work shares this subscription; no independent animation loop. */
 export function subscribeClock(listener: Listener) {
@@ -95,6 +93,14 @@ export function withMotion(work: (api: Stack) => void) {
 
 export function refreshMotion() {
   stack?.ScrollTrigger.refresh();
+}
+
+/** Reduced motion: the ScrollTrigger UMD build self-registers at CDN load and leaves
+    a paused internal refresh call in the timeline; kill housekeeping too. */
+export function quiesceMotion() {
+  const api = motionStack();
+  if (!api) return;
+  for (const tween of api.gsap.globalTimeline.getChildren(true, true, true)) tween.kill();
 }
 
 function clearExits() {
@@ -285,22 +291,45 @@ export function connectionFeedback() {
   });
 }
 
-export function pixelTheme(next: "day" | "night", apply: () => void) {
+export function pixelTheme(
+  next: "day" | "night",
+  apply: () => void,
+  origin?: { x: number; y: number },
+) {
   settleTheme?.();
   let animated = false;
   withMotion(({ gsap }) => {
     const grid = document.querySelector<HTMLElement>(".pixel-transition-grid");
     if (!grid) return;
     animated = true;
-    const cols = Number(
-      grid.querySelector(".pixel-transition-matrix")?.getAttribute("data-cols") ?? 12,
-    );
+    const matrix = grid.querySelector<HTMLElement>(".pixel-transition-matrix");
+    const cols = Number(matrix?.getAttribute("data-cols") ?? 12);
     const side = Math.ceil(Math.max(innerWidth / cols, innerHeight / 8));
     grid.style.setProperty("--pixel-side", `${side}px`);
     grid.style.color = next === "day" ? "#f4efe6" : "#1c1b18";
     grid.hidden = false;
-    const blocks = grid.querySelectorAll(".pixel-transition-matrix > i");
+    const blocks = Array.from(grid.querySelectorAll<HTMLElement>(".pixel-transition-matrix > i"));
+    const bloom = grid.querySelector<HTMLElement>(".pixel-transition-bloom");
+    const ox = origin?.x ?? innerWidth / 2;
+    const oy = origin?.y ?? innerHeight / 2;
+    // One batched geometry read: each pixel's delay follows its distance from the
+    // toggle, so the curtain arrives and dissolves as a ripple, not random static.
+    const distances = blocks.map((block) => {
+      const rect = block.getBoundingClientRect();
+      return Math.hypot(rect.left + rect.width / 2 - ox, rect.top + rect.height / 2 - oy);
+    });
+    const farthest = Math.max(...distances, 1);
+    const wave = (index: number) => (distances[index] / farthest) * 0.3;
+    if (bloom) {
+      bloom.style.setProperty("--bloom-x", `${ox}px`);
+      bloom.style.setProperty("--bloom-y", `${oy}px`);
+      bloom.style.background =
+        next === "day"
+          ? "radial-gradient(circle at var(--bloom-x) var(--bloom-y), rgb(255 205 105 / 0.55), rgb(255 205 105 / 0.16) 34%, transparent 70%)"
+          : "radial-gradient(circle at var(--bloom-x) var(--bloom-y), rgb(126 156 255 / 0.42), rgb(126 156 255 / 0.12) 34%, transparent 70%)";
+    }
     gsap.set(blocks, { scale: 0, opacity: 0 });
+    if (bloom) gsap.set(bloom, { opacity: 0, scale: 0.7 });
     let applied = false;
     const swap = () => {
       if (!applied) {
@@ -315,25 +344,15 @@ export function pixelTheme(next: "day" | "night", apply: () => void) {
       },
     });
     timeline
-      .to(blocks, {
-        scale: 1.01,
-        opacity: 1,
-        duration: 0.12,
-        ease: "steps(1)",
-        stagger: { amount: 0.23, grid: [8, cols], from: "random" },
-      })
-      .call(swap, [], 0.35)
       .to(
         blocks,
-        {
-          scale: 0,
-          opacity: 0,
-          duration: 0.12,
-          ease: "steps(1)",
-          stagger: { amount: 0.32, grid: [8, cols], from: "random" },
-        },
-        0.43,
-      );
+        { scale: 1.01, opacity: 1, duration: 0.16, ease: "back.out(2.2)", delay: wave },
+        0,
+      )
+      .to(bloom, { opacity: 1, scale: 1.15, duration: 0.4, ease: "power2.out" }, 0.08)
+      .call(swap, [], 0.46)
+      .to(bloom, { opacity: 0, scale: 1.5, duration: 0.5, ease: "power2.inOut" }, 0.5)
+      .to(blocks, { scale: 0, opacity: 0, duration: 0.22, ease: "power2.in", delay: wave }, 0.52);
     settleTheme = () => {
       timeline.kill();
       swap();
@@ -387,7 +406,11 @@ function canvasScene(api: Stack) {
     velocity = 0;
   let pointerRect: DOMRect | null = null;
   const colors = ["#ffe680", "#f59e0b", "#8eaf9d", "#7a9bc9"];
-  const pollen: Particle[] = Array.from({ length: 40 }, (_, i) => ({
+  // Low-end phones get a lighter particle budget; the scene reads the same.
+  const nav = navigator as Navigator & { deviceMemory?: number };
+  const lowPower =
+    coarsePointer.matches && ((nav.hardwareConcurrency || 8) <= 4 || (nav.deviceMemory || 8) <= 4);
+  const pollen: Particle[] = Array.from({ length: lowPower ? 22 : 40 }, (_, i) => ({
     x: Math.random(),
     y: Math.random(),
     vx: 0,
@@ -397,6 +420,21 @@ function canvasScene(api: Stack) {
     color: colors[i % colors.length],
   }));
   const confetti: Particle[] = [];
+  // Touch devices have no pointer parallax; scroll velocity drives the same depth
+  // layers so scrolling carries the garden's dimensionality on phones.
+  const gardenLayer = coarsePointer.matches
+    ? document.querySelector<HTMLElement>(".garden-scene-hero .garden-pointer")
+    : null;
+  const pollenLayer = coarsePointer.matches
+    ? document.querySelector<HTMLElement>(".garden-scene-hero .garden-pollen")
+    : null;
+  const gardenY = gardenLayer
+    ? api.gsap.quickTo(gardenLayer, "y", { duration: 0.7, ease: "power3.out" })
+    : undefined;
+  const pollenY = pollenLayer
+    ? api.gsap.quickTo(pollenLayer, "y", { duration: 0.9, ease: "power3.out" })
+    : undefined;
+  let parallaxRest = 0;
   const bee = createBee((x, y, count, tint) => burstAt?.(x, y, count, tint));
   liveBee = bee;
   const readBeeColors = (): BeeColors => {
@@ -462,7 +500,9 @@ function canvasScene(api: Stack) {
   window.addEventListener("scroll", invalidatePointerRect, { passive: true });
   burstAt = (x, y, count = 15, tint) => {
     if (document.hidden) return;
-    for (let i = 0; i < count && confetti.length < 60; i++) {
+    const total = lowPower ? Math.ceil(count / 2) : count;
+    const cap = lowPower ? 30 : 60;
+    for (let i = 0; i < total && confetti.length < cap; i++) {
       const angle = Math.random() * Math.PI * 2;
       confetti.push({
         x,
@@ -527,6 +567,8 @@ function canvasScene(api: Stack) {
               : null;
     return zone ? { key: `a:${zone}`, zone } : { key: "", zone: null };
   };
+  let lastTapKey = "";
+  let lastTapAt = -1e9;
   const beeOver = (event: PointerEvent) => {
     if (event.pointerType !== "mouse") return;
     const target = event.target instanceof Element ? event.target : null;
@@ -563,6 +605,16 @@ function canvasScene(api: Stack) {
     )
       return;
     bee.click(event.clientX, event.clientY);
+    // Touch parity: a tap on a card/toggle/area earns the same context line as a
+    // mouse hover, deduped and rate-limited by the bee's calm touch cadence.
+    if (!coarsePointer.matches) return;
+    const hover = resolveHover(target);
+    const now = performance.now();
+    // Region jokes stay hover-only; a tap earns model context, never area lines.
+    if (hover.zone !== "model" || (hover.key === lastTapKey && now - lastTapAt < 6000)) return;
+    lastTapKey = hover.key;
+    lastTapAt = now;
+    bee.hover(hover.zone, hover.name, hover.tag);
   };
   let lastScrollY = window.scrollY;
   let lastScrollT = performance.now();
@@ -572,6 +624,16 @@ function canvasScene(api: Stack) {
     const dy = scrollY - lastScrollY;
     const dt = Math.max(0.016, (now - lastScrollT) / 1000);
     bee.scroll(Math.abs(dy) / dt / 60, Math.sign(dy));
+    if (gardenY || pollenY) {
+      const push = Math.max(-16, Math.min(16, (dy / dt) * 0.018));
+      gardenY?.(push);
+      pollenY?.(-push * 0.6);
+      window.clearTimeout(parallaxRest);
+      parallaxRest = window.setTimeout(() => {
+        gardenY?.(0);
+        pollenY?.(0);
+      }, 160);
+    }
     lastScrollY = scrollY;
     lastScrollT = now;
     if (!currentFlower?.isConnected) {
@@ -653,6 +715,12 @@ function canvasScene(api: Stack) {
     unsubscribe();
     observer.disconnect();
     themeObserver.disconnect();
+    window.clearTimeout(parallaxRest);
+    for (const layer of [gardenLayer, pollenLayer]) {
+      if (!layer) continue;
+      api.gsap.killTweensOf(layer);
+      layer.style.removeProperty("transform");
+    }
     window.removeEventListener("resize", resize);
     window.removeEventListener("resize", invalidateFlower);
     window.removeEventListener("scroll", invalidatePointerRect);
@@ -863,7 +931,8 @@ const DECODE_GLYPHS = "01<>+";
  */
 function tactileScene(api: Stack) {
   const { gsap } = api;
-  const pressable = "button:not(:disabled), a.nav-link, summary, [role='button'], .composer-chip";
+  const pressable =
+    "button:not(:disabled), a.nav-link, summary, [role='button'], .composer-chip, .model-column";
   let pressed: HTMLElement | null = null;
 
   const release = (bounce: boolean) => {
@@ -873,10 +942,10 @@ function tactileScene(api: Stack) {
     withMotion(() => {
       gsap.to(node, {
         scale: 1,
-        // A single crisp settle, not a long elastic: prolonged oscillation keeps the
-        // control "moving" for pointer tooling and reads as jitter on rapid clicks.
-        duration: bounce ? 0.3 : 0.18,
-        ease: bounce ? "power3.out" : "power2.out",
+        // A single springy overshoot reads as life; prolonged elastic oscillation
+        // keeps the control "moving" for pointer tooling and reads as jitter.
+        duration: bounce ? 0.34 : 0.18,
+        ease: bounce ? "arenaSnap" : "power2.out",
         overwrite: "auto",
       });
     });
@@ -1263,13 +1332,24 @@ function choreography(api: Stack) {
     introPlayed = true;
     const timeline = gsap.timeline({
       onComplete: () => {
-        gsap.set(".site-header-inner, .garden-scene-hero, .question-band, .model-roster", {
-          clearProps: "transform,opacity,visibility,clipPath",
-        });
+        gsap.set(
+          ".site-header-inner, .brand-link, .main-navigation, .mobile-menu-button, .header-account, .garden-scene-hero, .question-band, .model-roster",
+          {
+            clearProps: "transform,opacity,visibility,clipPath",
+          },
+        );
       },
     });
+    // Never transform the header shell: a transformed ancestor becomes the
+    // containing block for the fixed .table-actions bar and traps it over the
+    // header controls on phones. Fade the shell, slide only fixed-free rows.
     timeline
-      .from(".site-header-inner", { y: -24, autoAlpha: 0, duration: 0.55, ease: "arenaExpo" })
+      .from(".site-header-inner", { autoAlpha: 0, duration: 0.55, ease: "arenaExpo" })
+      .from(
+        ".brand-link, .main-navigation, .mobile-menu-button, .header-account",
+        { y: -14, autoAlpha: 0, duration: 0.5, ease: "arenaExpo", stagger: 0.05 },
+        0.05,
+      )
       .from(
         ".garden-scene-hero",
         {
@@ -1287,13 +1367,25 @@ function choreography(api: Stack) {
       .querySelectorAll<HTMLElement>(".workspace-lede > span:first-child")
       .forEach((label, i) => {
         const split = SplitText.create(label, {
-          type: "lines,words,chars",
+          type: coarsePointer.matches ? "lines,words" : "lines,words,chars",
           mask: "lines",
           autoSplit: true,
           charsClass: "kinetic-char",
           wordsClass: "kinetic-word",
           aria: "none",
           onSplit: (self) => {
+            // Per-character decode writes textContent every frame; on throttled
+            // phone CPUs that alone owns the load long-task. Words bloom instead.
+            if (coarsePointer.matches) {
+              const words = self.words as HTMLElement[];
+              return gsap.from(words, {
+                yPercent: 115,
+                duration: 0.7,
+                ease: "arenaExpo",
+                stagger: 0.05,
+                delay: 0.12 + i * 0.08,
+              });
+            }
             const chars = self.chars as HTMLElement[];
             const originals = chars.map((char) => char.textContent ?? "");
             const decode = { progress: 0 };
@@ -1419,10 +1511,11 @@ function choreography(api: Stack) {
   const results = document.querySelector("#results");
   if (results) observer.observe(results, { childList: true, subtree: true });
   const hoverScramble = (event: PointerEvent) => {
-    if (event.pointerType !== "mouse") return;
     const target =
       event.target instanceof Element ? event.target.closest(".nav-link, .surprise-button") : null;
     if (!target || target.contains(event.relatedTarget as Node | null)) return;
+    // Touch taps decode the Surprise label; nav links stay mouse-only.
+    if (event.pointerType !== "mouse" && !target.classList.contains("surprise-button")) return;
     const label = target.querySelector<HTMLElement>(".scramble-label");
     if (!label) return;
     withMotion(() => {
@@ -1938,11 +2031,13 @@ export function startMotionClock() {
 export function startChoreography(paused: boolean) {
   const api = motionStack();
   if (!api || paused) return () => {};
-  api.gsap.registerPlugin(api.Flip, api.ScrollTrigger, api.SplitText, api.CustomEase);
-  api.CustomEase.create("arenaExpo", "M0,0 C0.16,1 0.3,1 1,1");
-  api.CustomEase.create("arenaSnap", "M0,0 C0.34,1.56 0.64,1 1,1");
   const media = api.gsap.matchMedia();
   media.add("(prefers-reduced-motion: no-preference)", (ctx) => {
+    // Register inside the motion gate: ScrollTrigger's init schedules an internal
+    // refresh tween that would otherwise linger in the timeline under reduced motion.
+    api.gsap.registerPlugin(api.Flip, api.ScrollTrigger, api.SplitText, api.CustomEase);
+    api.CustomEase.create("arenaExpo", "M0,0 C0.16,1 0.3,1 1,1");
+    api.CustomEase.create("arenaSnap", "M0,0 C0.34,1.56 0.64,1 1,1");
     context = ctx;
     stack = api;
     lenis = new api.Lenis({

@@ -13,6 +13,7 @@
       try {
         if (localStorage.getItem("model-table:color-mode") === "night") {
           document.documentElement.dataset.colorMode = "night";
+          document.documentElement.classList.add("dark");
           document.querySelector('meta[name="theme-color"]').content = "#1c1b18";
         }
         if (
@@ -23,6 +24,16 @@
         }
       } catch {}
     </script>
+    <style>
+      /* Critical canvas color: in dev the app stylesheet arrives after first paint,
+         and a transparent-to-palette change would run the theme glide on load. */
+      body {
+        background: #f4efe6;
+      }
+      :root[data-color-mode="night"] body {
+        background: #1c1b18;
+      }
+    </style>
     <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
     <link rel="manifest" href="%BASE_URL%manifest.webmanifest" />
     <link rel="canonical" href="https://heisenberg22077.github.io/pollinations-model-arena/" />

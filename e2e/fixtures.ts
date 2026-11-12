@@ -88,6 +88,7 @@ export async function mockApp(
   page: Page,
   options: {
     motion?: boolean;
+    connected?: boolean;
     catalog?: unknown;
     connectDelayMs?: number;
     chat?: (route: Route, request: ChatRequest, attempt: number) => Promise<void>;
@@ -103,14 +104,15 @@ export async function mockApp(
   });
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.addInitScript(
-    ({ tokenStorage, testKey }) => {
-      sessionStorage.setItem(tokenStorage, testKey);
+    ({ tokenStorage, testKey, connected }) => {
+      if (connected) sessionStorage.setItem(tokenStorage, testKey);
+      else sessionStorage.removeItem(tokenStorage);
       window.__unhandledRejections = [];
       window.addEventListener("unhandledrejection", (event) =>
         window.__unhandledRejections?.push(String(event.reason)),
       );
     },
-    { tokenStorage: TOKEN_STORAGE, testKey: TEST_KEY },
+    { tokenStorage: TOKEN_STORAGE, testKey: TEST_KEY, connected: options.connected !== false },
   );
   await page.route("**/*", async (route) => {
     const url = route.request().url();
@@ -149,6 +151,8 @@ export async function mockApp(
         contentType: filename.endsWith(".css") ? "text/css" : "application/javascript",
       });
     } else if (url.includes("/dist/connect.js")) {
+      // Mirror both real widget states: the unconnected label is ~162px wide and
+      // was the element that overlapped the theme button on narrow phones.
       const body =
         "setTimeout(() => { class TestConnect extends HTMLElement {" +
         "get apiKey() { return sessionStorage.getItem('" +
@@ -159,7 +163,11 @@ export async function mockApp(
         "',value); else sessionStorage.removeItem('" +
         TOKEN_STORAGE +
         "'); this.dispatchEvent(new Event('change')); }" +
-        "connectedCallback() { this.innerHTML = '<button type=button aria-label=\"Pollen-test-connection\">Pollen connected</button>'; }" +
+        "connectedCallback() { this.render(); this.addEventListener('change', () => this.render()); }" +
+        "render() { this.innerHTML = sessionStorage.getItem('" +
+        TOKEN_STORAGE +
+        "') ? '<button type=button aria-label=\"Pollen-test-connection\">Pollen connected</button>'" +
+        ' : \'<button type=button data-intent="brand" aria-label="Connect Pollinations" style="min-width:162px"><span aria-hidden="true">*</span><span>Pollinations Connect</span></button>\'; }' +
         "} customElements.define('polli-connect', TestConnect); }, " +
         (options.connectDelayMs ?? 0) +
         ");";

@@ -14,6 +14,7 @@ import {
   beeComment,
   captureLayout,
   celebrate,
+  coarsePointer,
   commitLayout,
   subscribeClock,
   withMotion,
@@ -42,7 +43,9 @@ function Metric({
   useEffect(() => {
     const node = ref.current;
     if (node) node.textContent = value;
-    if (reduce) return;
+    // Count-up tweens write text every frame; on phones the settle pop and award
+    // carry the feedback, so the number lands instantly instead of owning frames.
+    if (reduce || coarsePointer.matches) return;
     const numeric = Number(value.replaceAll(",", ""));
     if (!node || !Number.isFinite(numeric) || numeric <= 0) return;
     let tween: gsap.core.Tween | undefined;
@@ -247,25 +250,27 @@ function ModelCardView({
           ease: "none",
         }),
       );
-      effects.push(
-        gsap.to(card.querySelectorAll(".pending-pixels > span:not(.skeleton-shimmer)"), {
-          opacity: 0.25,
-          duration: 0.6,
-          repeat: -1,
-          yoyo: true,
-          stagger: 0.08,
-          ease: "sine.inOut",
-        }),
-      );
-      effects.push(
-        gsap.to(card.querySelector(".pending-cursor"), {
-          opacity: 0.25,
-          duration: 0.45,
-          repeat: -1,
-          yoyo: true,
-          ease: "steps(1)",
-        }),
-      );
+      if (!coarsePointer.matches) {
+        effects.push(
+          gsap.to(card.querySelectorAll(".pending-pixels > span:not(.skeleton-shimmer)"), {
+            opacity: 0.25,
+            duration: 0.6,
+            repeat: -1,
+            yoyo: true,
+            stagger: 0.08,
+            ease: "sine.inOut",
+          }),
+        );
+        effects.push(
+          gsap.to(card.querySelector(".pending-cursor"), {
+            opacity: 0.25,
+            duration: 0.45,
+            repeat: -1,
+            yoyo: true,
+            ease: "steps(1)",
+          }),
+        );
+      }
     });
     return () => {
       for (const effect of effects) effect.kill();

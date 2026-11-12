@@ -959,7 +959,8 @@ export function createBee(
       if (climax) onBurst(pos.x, pos.y, 12, colors.accent);
     },
     hover(zone, name, tag) {
-      if (touchPrimary || !enabled || opacity < 0.4 || storyIndex >= 0) return;
+      // Callers gate by pointer type; touch taps arrive here at the calmer touch cadence.
+      if (!enabled || opacity < 0.4 || storyIndex >= 0) return;
       if (!zone) {
         pendingHover = null;
         return;

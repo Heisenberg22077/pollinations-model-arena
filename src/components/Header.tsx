@@ -56,7 +56,7 @@ export function Header({
   apiKey: string | null;
   onKey: (key: string | null) => void;
   colorMode: ColorMode;
-  onToggleColorMode: () => void;
+  onToggleColorMode: (origin?: { x: number; y: number }) => void;
   onOpenGuide: () => void;
   guideOpen: boolean;
   canRun: boolean;
@@ -158,6 +158,20 @@ export function Header({
           </a>
           <button
             type="button"
+            className="menu-theme-button"
+            onClick={(event) => {
+              document.getElementById("mobile-navigation")?.hidePopover();
+              const rect = event.currentTarget.getBoundingClientRect();
+              onToggleColorMode({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+            }}
+          >
+            {colorMode === "day" ? "Night mode" : "Day mode"}
+            <span className="theme-icon" aria-hidden="true">
+              {colorMode === "day" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+            </span>
+          </button>
+          <button
+            type="button"
             onClick={() => {
               togglePaused();
               document.getElementById("mobile-navigation")?.hidePopover();
@@ -216,7 +230,7 @@ export function Header({
                 undefined,
                 "fluid",
               );
-              onToggleColorMode();
+              onToggleColorMode({ x: event.clientX, y: event.clientY });
             }}
             aria-label={colorMode === "day" ? "Switch to night mode" : "Switch to day mode"}
             title={colorMode === "day" ? "Night mode" : "Day mode"}

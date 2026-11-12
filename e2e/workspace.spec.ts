@@ -7,6 +7,9 @@ const MAX_PROMPT_LENGTH = 280;
 test("draws every Surprise question once per cycle, avoids a boundary repeat, and stays within the prompt limit", async ({
   page,
 }) => {
+  // 72 real clicks, each waiting out the intentional 0.34s spring release before
+  // Playwright considers the button stable; the default 30s budget is too tight.
+  test.setTimeout(60_000);
   await page.addInitScript(() => {
     Math.random = () => 0;
   });
