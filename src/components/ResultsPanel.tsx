@@ -8,9 +8,18 @@ import {
   Table2,
   X,
 } from "lucide-react";
-import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  Component,
+  type CSSProperties,
+  type KeyboardEvent,
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import type { ModelDef } from "../config";
-import { captureLayout, commitLayout } from "../lib/arena-motion";
+import { beeComment, captureLayout, commitLayout } from "../lib/arena-motion";
 import { formatLatency, formatPollen, formatTokens } from "../lib/format";
 import { animateFeedback } from "../lib/motion";
 import type { HealthStatus, Run, Runs } from "../types";
@@ -18,8 +27,37 @@ import { CollapsibleRegion } from "./AnimatedDisclosure";
 import { MetricsComparison } from "./MetricsComparison";
 import { ModelCard } from "./ModelCard";
 import { ModelLogo } from "./ModelLogo";
+import { RunTrail } from "./RunTrail";
 
 type SortOrder = "roster" | "finish" | "latency" | "cost" | "provider";
+
+// Snapshot before React mutates the grid. A layout effect runs after that mutation
+// and cannot recover the previous positions for arrivals that change live sorting.
+class SortedLayout extends Component<{ order: string; children: ReactNode }> {
+  getSnapshotBeforeUpdate(previous: Readonly<{ order: string; children: ReactNode }>) {
+    if (previous.order === this.props.order) return false;
+    captureLayout();
+    return true;
+  }
+  componentDidUpdate() {
+    commitLayout();
+  }
+  render() {
+    return this.props.children;
+  }
+}
+
+function scrollComparison(event: KeyboardEvent<HTMLElement>) {
+  if (event.target !== event.currentTarget || !["ArrowLeft", "ArrowRight"].includes(event.key))
+    return;
+  const grid = event.currentTarget;
+  if (grid.scrollWidth <= grid.clientWidth) return;
+  event.preventDefault();
+  grid.scrollBy({
+    left: (event.key === "ArrowRight" ? 1 : -1) * Math.max(120, grid.clientWidth * 0.75),
+    behavior: "instant",
+  });
+}
 
 function GhostCard({ model }: { model: ModelDef }) {
   const Icon = model.kind === "image" ? ImageIcon : MessageSquare;
@@ -121,7 +159,8 @@ export function ResultsPanel({
   // Mount the comparison table only once opened: keeping it out of the run commit
   // saves a 13-row table reconcile on every answer batch on slow phones.
   const [metricsLoaded, setMetricsLoaded] = useState(false);
-  const gridRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLElement>(null);
+  const copyIconRef = useRef<HTMLSpanElement>(null);
   const changeSort = (nextSort: SortOrder) => {
     if (nextSort === sort) return;
     captureLayout();
@@ -141,12 +180,20 @@ export function ResultsPanel({
     .map((model) => ({ model, run: runs[model.id] }))
     .filter((entry): entry is { model: ModelDef; run: Run } => entry.run?.status === "done");
   const errors = models.filter((model) => runs[model.id]?.status === "error").length;
-  const fastest = [...done]
-    .filter((entry) => entry.run.latencyMs !== undefined)
-    .sort((a, b) => (a.run.latencyMs ?? 0) - (b.run.latencyMs ?? 0))[0];
-  const cheapest = [...done]
-    .filter((entry) => entry.run.cost !== undefined)
-    .sort((a, b) => (a.run.cost ?? 0) - (b.run.cost ?? 0))[0];
+  // Awards are only final once the race completes. Recomputing them on every arrival
+  // flipped isFastest/isCheapest on the previous winners, re-rendering ~3 cards per
+  // settle on throttled phones; freeze them until the run finishes so memo isolates
+  // each commit to the single card that actually changed.
+  const fastest = isRunning
+    ? undefined
+    : [...done]
+        .filter((entry) => entry.run.latencyMs !== undefined)
+        .sort((a, b) => (a.run.latencyMs ?? 0) - (b.run.latencyMs ?? 0))[0];
+  const cheapest = isRunning
+    ? undefined
+    : [...done]
+        .filter((entry) => entry.run.cost !== undefined)
+        .sort((a, b) => (a.run.cost ?? 0) - (b.run.cost ?? 0))[0];
   const totalCost = models.reduce((sum, model) => sum + (runs[model.id]?.cost ?? 0), 0);
   const unknownCost = models.some((model) => {
     const run = runs[model.id];
@@ -167,6 +214,17 @@ export function ResultsPanel({
     try {
       await navigator.clipboard.writeText(markdownFor(ordered, runs, lastQuestion));
       setCopyState("copied");
+      animateFeedback(
+        copyIconRef.current,
+        [
+          { transform: "rotate(-35deg) scale(0.35)" },
+          { transform: "rotate(10deg) scale(1.18)" },
+          { transform: "rotate(0deg) scale(1)" },
+        ],
+        440,
+        "bouncy",
+      );
+      beeComment("copy");
     } catch {
       setCopyState("failed");
     }
@@ -179,6 +237,7 @@ export function ResultsPanel({
     link.href = url;
     link.download = `model-table-${new Date().toISOString().slice(0, 10)}.md`;
     link.click();
+    beeComment("export");
     setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
@@ -195,11 +254,19 @@ export function ResultsPanel({
           <span className="text-xs tabular-nums text-quiet">{models.length} models</span>
         </div>
         {models.length ? (
-          <div id="comparison-grid" className="comparison-grid" data-count={models.length}>
+          <section
+            id="comparison-grid"
+            className="comparison-grid"
+            data-count={models.length}
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard users scroll this comparison region with arrow keys.
+            tabIndex={0}
+            onKeyDown={scrollComparison}
+            aria-label="Model comparison"
+          >
             {models.map((model) => (
               <GhostCard key={model.id} model={model} />
             ))}
-          </div>
+          </section>
         ) : (
           <p className="my-8 text-sm text-quiet">Choose at least one model from the lineup.</p>
         )}
@@ -216,6 +283,7 @@ export function ResultsPanel({
             </p>
           ) : null}
           <h2 className="submitted-question">“{lastQuestion}”</h2>
+          <RunTrail models={models} runs={runs} running={isRunning} />
           <div className="results-progress" role="status" aria-live="polite">
             <span className="inline-flex items-center gap-2 font-medium">
               <span
@@ -257,6 +325,7 @@ export function ResultsPanel({
             type="button"
             onClick={() => {
               setMetricsLoaded(true);
+              if (!metricsOpen) beeComment("compare");
               setMetricsOpen((open) => !open);
             }}
             aria-expanded={metricsOpen}
@@ -274,15 +343,7 @@ export function ResultsPanel({
           </button>
           <button
             type="button"
-            onClick={(event) => {
-              animateFeedback(
-                event.currentTarget.firstElementChild,
-                [{ transform: "scale(0.8)" }, { transform: "scale(1)" }],
-                undefined,
-                "bouncy",
-              );
-              void copyAll();
-            }}
+            onClick={() => void copyAll()}
             aria-label="Copy as Markdown"
             title={
               copyState === "failed"
@@ -291,7 +352,7 @@ export function ResultsPanel({
             }
             className="soft-button result-action"
           >
-            <span className="action-icon" aria-hidden="true">
+            <span ref={copyIconRef} className="action-icon" aria-hidden="true">
               {copyState === "copied" ? (
                 <Check className="h-3.5 w-3.5 text-accent-ink" aria-hidden="true" />
               ) : (
@@ -334,26 +395,32 @@ export function ResultsPanel({
       <CollapsibleRegion open={metricsOpen} className="metrics-reveal">
         {metricsLoaded ? <MetricsComparison models={ordered} runs={runs} /> : null}
       </CollapsibleRegion>
-      <div
-        id="comparison-grid"
-        className="comparison-grid"
-        data-count={ordered.length}
-        ref={gridRef}
-      >
-        {ordered.map((model) => (
-          <ModelCard
-            key={`${model.id}:${runs[model.id]?.queuedAt ?? 0}`}
-            model={model}
-            run={runs[model.id]}
-            index={models.indexOf(model)}
-            isFastest={fastest?.model.id === model.id}
-            isCheapest={cheapest?.model.id === model.id}
-            canRerun={canRerun && health[model.id] !== "down"}
-            onRerun={onRerun}
-            question={lastQuestion}
-          />
-        ))}
-      </div>
+      <SortedLayout order={ordered.map((model) => model.id).join(",")}>
+        <section
+          id="comparison-grid"
+          className="comparison-grid"
+          data-count={ordered.length}
+          ref={gridRef}
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard users scroll this comparison region with arrow keys.
+          tabIndex={0}
+          onKeyDown={scrollComparison}
+          aria-label="Model comparison"
+        >
+          {ordered.map((model) => (
+            <ModelCard
+              key={`${model.id}:${runs[model.id]?.queuedAt ?? 0}`}
+              model={model}
+              run={runs[model.id]}
+              index={models.indexOf(model)}
+              isFastest={fastest?.model.id === model.id}
+              isCheapest={cheapest?.model.id === model.id}
+              canRerun={canRerun && health[model.id] !== "down"}
+              onRerun={onRerun}
+              question={lastQuestion}
+            />
+          ))}
+        </section>
+      </SortedLayout>
     </section>
   );
 }

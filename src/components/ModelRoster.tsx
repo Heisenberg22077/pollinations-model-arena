@@ -1,7 +1,7 @@
 import { Check, ChevronDown, Coins, Image as ImageIcon } from "lucide-react";
 import { type CSSProperties, useState } from "react";
 import type { ModelDef } from "../config";
-import { animateFeedback } from "../lib/motion";
+import { beeComment } from "../lib/arena-motion";
 import type { HealthStatus } from "../types";
 import { CollapsibleRegion } from "./AnimatedDisclosure";
 import { ModelLogo } from "./ModelLogo";
@@ -30,18 +30,9 @@ function ModelToggle({
             ? "Provider health is degraded; responses may be slower."
             : model.blurb
       }
-      onClick={(event) => {
-        if (!selected)
-          animateFeedback(
-            event.currentTarget.querySelector(".selection-check"),
-            [
-              { transform: "scale(0.6)", opacity: 0 },
-              { transform: "scale(1)", opacity: 1 },
-            ],
-            undefined,
-            "bouncy",
-          );
+      onClick={() => {
         onToggle();
+        beeComment(selected ? "deselect" : "select", model.name);
       }}
       className="model-toggle"
       data-health={health}
@@ -131,6 +122,7 @@ export function ModelRoster({
               type="button"
               onClick={() => {
                 onPreset(preset);
+                beeComment(`preset-${preset}`);
                 setOpen(preset !== "core");
               }}
               aria-pressed={presetActive(preset)}

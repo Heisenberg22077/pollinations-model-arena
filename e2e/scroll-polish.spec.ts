@@ -1,5 +1,93 @@
 import { expect, test } from "@playwright/test";
-import { catalog, IDS, mockApp } from "./fixtures";
+import { catalog, delay, fulfillChat, fulfillImage, IDS, mockApp } from "./fixtures";
+
+test("distinct live latency arrivals animate every reordered comparison", async ({ page }) => {
+  const state = await mockApp(page, {
+    chat: async (route, request) => {
+      await delay([2400, 1800, 1200, 600, 100][(IDS as readonly string[]).indexOf(request.model)]);
+      await fulfillChat(route, request);
+    },
+    image: async (route) => {
+      await delay(50);
+      await fulfillImage(route);
+    },
+  });
+  await page.getByRole("button", { name: "Run the table", exact: true }).click();
+  await page.getByRole("combobox", { name: "Sort results" }).selectOption("latency");
+  await page.locator("#comparison-grid").scrollIntoViewIfNeeded();
+  const result = await page.locator("#comparison-grid").evaluate(async (grid) => {
+    let before = [...grid.children].map((el) => el.getAttribute("data-model-id")).join(",");
+    let reorders = 0,
+      unanimated = 0;
+    const observer = new MutationObserver(() => {
+      const order = [...grid.children].map((el) => el.getAttribute("data-model-id")).join(",");
+      if (order !== before) {
+        reorders++;
+        if (!grid.querySelector(".is-flipping")) unanimated++;
+        before = order;
+      }
+    });
+    observer.observe(grid, { childList: true });
+    await new Promise<void>((resolve) => {
+      const timer = setInterval(() => {
+        if (grid.querySelectorAll('article[data-status="done"]').length === 6) {
+          clearInterval(timer);
+          resolve();
+        }
+      }, 50);
+    });
+    observer.disconnect();
+    return { reorders, unanimated };
+  });
+  expect(result.reorders).toBeGreaterThanOrEqual(2);
+  expect(result.unanimated).toBe(0);
+  expect(state.pageErrors).toEqual([]);
+});
+
+for (const theme of ["day", "night"]) {
+  for (const width of [320, 360, 390, 768, 1440]) {
+    test(`two-model comparison stays readable at ${width}px in ${theme}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.addInitScript(
+        (value) => localStorage.setItem("model-table:color-mode", value),
+        theme,
+      );
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await mockApp(page);
+      for (const id of IDS.slice(2, 6)) {
+        await page.locator(`.model-toggle[data-model-id="${id}"]`).dispatchEvent("click");
+      }
+      const grid = page.locator(".comparison-grid");
+      await expect(grid).toHaveAttribute("data-count", "2");
+      const columns = await grid.evaluate(
+        (el) => getComputedStyle(el).gridTemplateColumns.split(" ").length,
+      );
+      expect(columns).toBe(width < 680 ? 1 : 2);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+    });
+  }
+}
+
+test("comparison grid supports focus and horizontal arrow scrolling", async ({ page }) => {
+  await mockApp(page);
+  await page.getByRole("button", { name: "Run the table", exact: true }).click();
+  await expect(page.locator('article[data-status="done"]')).toHaveCount(6);
+  const grid = page.locator("#comparison-grid");
+  await grid.evaluate((node) => {
+    const el = node as HTMLElement;
+    el.style.width = "600px";
+    el.style.overflowX = "auto";
+    el.style.gridTemplateColumns = "repeat(6, 280px)";
+  });
+  await expect(grid).toHaveAttribute("tabindex", "0");
+  await grid.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => grid.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
+  await page.keyboard.press("ArrowLeft");
+  await expect.poll(() => grid.evaluate((el) => el.scrollLeft)).toBe(0);
+});
 
 test("glides a single preset highlight through interruptions, resizing and manual selections", async ({
   page,

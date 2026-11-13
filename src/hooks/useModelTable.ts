@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CORE_IDS, DEFAULT_PROMPT, MAX_PROMPT_LENGTH, MODELS, type ModelDef } from "../config";
 import { beeComment } from "../lib/arena-motion";
 import { pricingFor } from "../lib/catalog";
@@ -94,7 +94,10 @@ export function useModelTable(): ModelTable {
     const item = settleQueueRef.current.shift();
     if (item) {
       lastSettleRef.current = performance.now();
-      patchRun(item.runId, item.id, item.patch);
+      // The answer card render is the heavy part of an arrival; a transition lets
+      // React time-slice it across frames instead of blocking one ~100ms commit on
+      // slow phones. runsRef stays synchronous so finish()/history remain consistent.
+      startTransition(() => patchRun(item.runId, item.id, item.patch));
     }
     if (settleQueueRef.current.length) {
       settleTimerRef.current = window.setTimeout(flushSettle, 90);
@@ -236,7 +239,7 @@ export function useModelTable(): ModelTable {
       busyRef.current = false;
       setIsRunning(false);
       recordHistory();
-      if (Object.keys(runsRef.current).length > 1) beeComment("compare");
+      beeComment("complete");
     },
     [recordHistory, settlesDrained],
   );
@@ -338,7 +341,10 @@ export function useModelTable(): ModelTable {
         };
     }
     replaceRuns(next);
-    if (wasRunning) recordHistory();
+    if (wasRunning) {
+      recordHistory();
+      beeComment("cancel");
+    }
   }, [discardSettles, recordHistory, replaceRuns]);
   const clear = useCallback(() => {
     stop();

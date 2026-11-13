@@ -25,6 +25,7 @@ export function CollapsibleRegion({
     const node = ref.current;
     if (!node) return;
     let tween: gsap.core.Tween | undefined;
+    let entrance: gsap.core.Tween | undefined;
     const finish = () => {
       setRetained(open);
       if (!open) callback.current?.();
@@ -44,7 +45,7 @@ export function CollapsibleRegion({
           onComplete: finish,
         });
         if (open)
-          gsap.fromTo(
+          entrance = gsap.fromTo(
             node.querySelectorAll(".guide-content > *, .model-toggle, .metrics-group"),
             { y: 8, opacity: 0 },
             { y: 0, opacity: 1, duration: 0.35, delay: 0.12, stagger: 0.025, ease: "arenaExpo" },
@@ -57,6 +58,7 @@ export function CollapsibleRegion({
     }
     return () => {
       tween?.kill();
+      entrance?.revert();
     };
   }, [open, overlay, reduce]);
   return (

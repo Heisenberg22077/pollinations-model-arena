@@ -311,6 +311,27 @@ test("enforces text and image deadlines and leaves no pending cards", async ({ p
   expect(await page.evaluate(() => window.__unhandledRejections)).toEqual([]);
 });
 
+test("settlement fallback finishes a hidden tab when paint callbacks are suspended", async ({
+  page,
+}) => {
+  const state = await mockApp(page);
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", { configurable: true, value: true });
+    window.requestAnimationFrame = () => 0;
+  });
+  await page.getByRole("button", { name: "Run the table", exact: true }).dispatchEvent("click");
+  await expect(page.locator('article[data-status="done"]')).toHaveCount(6);
+  await expect(page.getByText("6/6 answered", { exact: true })).toBeVisible();
+  const history = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("model-table:recent:v1") ?? "[]"),
+  );
+  expect(history[0].models).toHaveLength(6);
+  expect(history[0].models.every((model: { status: string }) => model.status === "done")).toBe(
+    true,
+  );
+  expect(state.pageErrors).toEqual([]);
+});
+
 test("stops queued requests and prevents old responses replacing a new run", async ({ page }) => {
   let release: () => void = () => {};
   const held = new Promise<void>((resolve) => {

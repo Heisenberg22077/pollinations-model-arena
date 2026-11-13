@@ -11,5 +11,14 @@ export default defineConfig({
   build: {
     outDir: "dist",
     sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("/node_modules/lucide-react/")) return "vendor-lucide";
+          // Runtime GSAP is CDN-owned; this branch also covers future bundled imports.
+          if (id.includes("/node_modules/gsap/")) return "vendor-gsap";
+        },
+      },
+    },
   },
 });

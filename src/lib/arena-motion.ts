@@ -5,6 +5,7 @@ import type { ScrollTrigger } from "gsap/ScrollTrigger";
 import type { SplitText } from "gsap/SplitText";
 import type Lenis from "lenis";
 import {
+  type BeeAction,
   type BeeColors,
   type BeeEvent,
   type BeeHandle,
@@ -74,6 +75,12 @@ export function isBeeEnabled() {
 export function beeComment(event: BeeEvent, name?: string) {
   liveBee?.comment(event, name);
 }
+export function beeAction(action: BeeAction) {
+  liveBee?.action(action);
+}
+export function beeDiagnostics() {
+  return liveBee?.diagnostics;
+}
 /** Touch-primary devices get tap equivalents and lighter tween counts; desktop keeps the full show. */
 export const coarsePointer = window.matchMedia("(pointer: coarse)");
 
@@ -137,9 +144,7 @@ export function captureLayout() {
   withMotion(({ Flip }) => {
     flipAnimation?.progress(1).kill();
     clearExits();
-    document.querySelector(".comparison-grid")?.classList.add("is-flipping");
     const nodes = [...document.querySelectorAll<HTMLElement>(layoutSelector)];
-    captured = Flip.getState(nodes);
     departed = nodes
       .filter((node) => node.classList.contains("model-column"))
       .map((node) => ({
@@ -147,6 +152,16 @@ export function captureLayout() {
         node,
         rect: node.getBoundingClientRect(),
       }));
+    const visible = new Set(
+      departed
+        .filter(({ rect }) => rect.bottom > 0 && rect.top < innerHeight)
+        .map(({ node }) => node),
+    );
+    for (const { node, rect } of departed)
+      node.classList.toggle("is-flipping", rect.bottom > 0 && rect.top < innerHeight);
+    captured = Flip.getState(
+      nodes.filter((node) => !node.classList.contains("model-column") || visible.has(node)),
+    );
   });
 }
 
@@ -191,13 +206,25 @@ export function commitLayout() {
       exitNodes.add(clone);
       exitClones.push(clone);
     }
-    // Force real card sizes while measuring/animating: content-visibility's estimated
-    // intrinsic heights otherwise make Flip land cards at the wrong row, then snap.
-    const grid = document.querySelector<HTMLElement>(".comparison-grid");
-    grid?.classList.add("is-flipping");
-    const releaseGrid = () => grid?.classList.remove("is-flipping");
+    const previouslyVisible = new Set(
+      old.filter(({ rect }) => rect.bottom > 0 && rect.top < innerHeight).map(({ id }) => id),
+    );
+    const animated = targets.filter((node) => {
+      if (!node.classList.contains("model-column")) return true;
+      const rect = node.getBoundingClientRect();
+      return (
+        (rect.bottom > 0 && rect.top < innerHeight) ||
+        previouslyVisible.has(node.dataset.flipId ?? "")
+      );
+    });
+    for (const node of animated)
+      if (node.classList.contains("model-column")) node.classList.add("is-flipping");
+    const releaseGrid = () => {
+      for (const node of document.querySelectorAll(".model-column.is-flipping"))
+        node.classList.remove("is-flipping");
+    };
     flipAnimation = Flip.from(state, {
-      targets,
+      targets: animated,
       duration: 0.65,
       ease: "arenaExpo",
       scale: true,
@@ -291,10 +318,13 @@ export function connectionFeedback() {
   });
 }
 
+const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
 export function pixelTheme(
   next: "day" | "night",
   apply: () => void,
   origin?: { x: number; y: number },
+  ready?: Promise<unknown>,
 ) {
   settleTheme?.();
   let animated = false;
@@ -312,14 +342,22 @@ export function pixelTheme(
     const bloom = grid.querySelector<HTMLElement>(".pixel-transition-bloom");
     const ox = origin?.x ?? innerWidth / 2;
     const oy = origin?.y ?? innerHeight / 2;
-    // One batched geometry read: each pixel's delay follows its distance from the
-    // toggle, so the curtain arrives and dissolves as a ripple, not random static.
-    const distances = blocks.map((block) => {
-      const rect = block.getBoundingClientRect();
-      return Math.hypot(rect.left + rect.width / 2 - ox, rect.top + rect.height / 2 - oy);
-    });
+    // One batched geometry read. On a portrait phone the square matrix overhangs the
+    // screen and about half its pixels are off-canvas: they skip animation, and the
+    // ripple is normalised to the visible pixels so it spans the whole screen.
+    const rects = blocks.map((block) => block.getBoundingClientRect());
+    const onScreen = rects.map(
+      (r) => r.right > 0 && r.left < innerWidth && r.bottom > 0 && r.top < innerHeight,
+    );
+    const shown = blocks.filter((_, index) => onScreen[index]);
+    const distances = rects
+      .filter((_, index) => onScreen[index])
+      .map((r) => Math.hypot(r.left + r.width / 2 - ox, r.top + r.height / 2 - oy));
     const farthest = Math.max(...distances, 1);
     const wave = (index: number) => (distances[index] / farthest) * 0.3;
+    // Convex spacing: the lift ripple leaves the toggle quickly and slows as it
+    // reaches the far edges, so the transition settles instead of snapping off.
+    const liftWave = (index: number) => (distances[index] / farthest) ** 1.6 * 0.34;
     if (bloom) {
       bloom.style.setProperty("--bloom-x", `${ox}px`);
       bloom.style.setProperty("--bloom-y", `${oy}px`);
@@ -331,11 +369,23 @@ export function pixelTheme(
     gsap.set(blocks, { scale: 0, opacity: 0 });
     if (bloom) gsap.set(bloom, { opacity: 0, scale: 0.7 });
     let applied = false;
+    let cancelled = false;
     const swap = () => {
       if (!applied) {
         applied = true;
         apply();
       }
+    };
+    // Hold full cover until the new theme's art is decoded (bounded, so a dead
+    // network never traps the screen), commit it, and lift only after it painted:
+    // the restyle and image swap must never land inside the lift frames.
+    const reveal = async () => {
+      await Promise.race([ready, new Promise((resolve) => setTimeout(resolve, 800))]);
+      if (cancelled) return;
+      swap();
+      await nextFrame();
+      await nextFrame();
+      if (!cancelled) timeline.resume();
     };
     const timeline = gsap.timeline({
       onComplete: () => {
@@ -344,16 +394,15 @@ export function pixelTheme(
       },
     });
     timeline
-      .to(
-        blocks,
-        { scale: 1.01, opacity: 1, duration: 0.16, ease: "back.out(2.2)", delay: wave },
-        0,
-      )
+      .to(shown, { scale: 1.01, opacity: 1, duration: 0.16, ease: "back.out(2.2)", delay: wave }, 0)
       .to(bloom, { opacity: 1, scale: 1.15, duration: 0.4, ease: "power2.out" }, 0.08)
-      .call(swap, [], 0.46)
-      .to(bloom, { opacity: 0, scale: 1.5, duration: 0.5, ease: "power2.inOut" }, 0.5)
-      .to(blocks, { scale: 0, opacity: 0, duration: 0.22, ease: "power2.in", delay: wave }, 0.52);
+      .addPause(0.46, () => void reveal())
+      .to(bloom, { opacity: 0, scale: 1.5, duration: 0.8, ease: "sine.out" }, 0.47)
+      // Coverage falls with scale squared, so a gentler curve preserves a visible tail.
+      .to(shown, { scale: 0, duration: 0.9, ease: "themeLift", delay: liftWave }, 0.47)
+      .to(shown, { opacity: 0, duration: 0.9, ease: "power2.in", delay: liftWave }, 0.47);
     settleTheme = () => {
+      cancelled = true;
       timeline.kill();
       swap();
       grid.hidden = true;
@@ -370,6 +419,8 @@ export function surprisePollen() {
 
 export function celebrate(card: HTMLElement) {
   withMotion(({ gsap }) => {
+    const bounds = card.getBoundingClientRect();
+    if (bounds.bottom <= 0 || bounds.top >= innerHeight) return;
     const pill = card.querySelector(".answer-award-fastest");
     gsap.fromTo(
       pill,
@@ -435,8 +486,8 @@ function canvasScene(api: Stack) {
     ? api.gsap.quickTo(pollenLayer, "y", { duration: 0.9, ease: "power3.out" })
     : undefined;
   let parallaxRest = 0;
-  const bee = createBee((x, y, count, tint) => burstAt?.(x, y, count, tint));
-  liveBee = bee;
+  const bee = liveBee;
+  if (!bee) return () => {};
   const readBeeColors = (): BeeColors => {
     const cs = getComputedStyle(document.documentElement);
     const v = (name: string) => cs.getPropertyValue(name).trim();
@@ -542,9 +593,9 @@ function canvasScene(api: Stack) {
     const card = target.closest<HTMLElement>(".model-column:not(.flip-departure)");
     if (card) {
       const name = card.querySelector(".model-heading h3")?.textContent?.trim();
-      const tag: BeeTag | undefined = card.querySelector(".answer-award-fastest")
+      const tag: BeeTag | undefined = target.closest(".answer-award-fastest")
         ? "fastest"
-        : card.querySelector(".answer-award:not(.answer-award-fastest)")
+        : target.closest(".answer-award:not(.answer-award-fastest)")
           ? "cheapest"
           : undefined;
       return { key: `m:${name ?? ""}:${tag ?? ""}`, zone: "model", name, tag };
@@ -600,11 +651,19 @@ function canvasScene(api: Stack) {
     const target = event.target instanceof Element ? event.target : null;
     if (
       target?.closest(
-        "input, textarea, select, dialog, polli-connect, .history-popover, .bee-button, .bee-sound-button, .mobile-menu-button",
+        "button, a, input, textarea, select, summary, [role=button], dialog, polli-connect, .history-popover, .bee-home",
       )
-    )
+    ) {
+      // A specific award tap has context; ordinary control activation cannot feed or boop.
+      const award = target?.closest(".answer-award, .model-toggle");
+      if (award && coarsePointer.matches) {
+        const hover = resolveHover(award);
+        bee.hover(hover.zone, hover.name, hover.tag);
+      }
       return;
-    bee.click(event.clientX, event.clientY);
+    }
+    if (event.detail === 0) return;
+    bee.click(event.clientX, event.clientY, Boolean(target?.closest(".garden-pet, .ghost-card")));
     // Touch parity: a tap on a card/toggle/area earns the same context line as a
     // mouse hover, deduped and rate-limited by the bee's calm touch cadence.
     if (!coarsePointer.matches) return;
@@ -623,7 +682,7 @@ function canvasScene(api: Stack) {
     const scrollY = window.scrollY;
     const dy = scrollY - lastScrollY;
     const dt = Math.max(0.016, (now - lastScrollT) / 1000);
-    bee.scroll(Math.abs(dy) / dt / 60, Math.sign(dy));
+    bee.scroll();
     if (gardenY || pollenY) {
       const push = Math.max(-16, Math.min(16, (dy / dt) * 0.018));
       gardenY?.(push);
@@ -692,7 +751,6 @@ function canvasScene(api: Stack) {
       }
       velocity *= 0.94;
     }
-    bee.update(dt, time);
     if (confetti.length || bee.active || celebrationDirty) {
       burstCtx.clearRect(0, 0, innerWidth, innerHeight);
       for (let i = confetti.length - 1; i >= 0; i--) {
@@ -731,8 +789,6 @@ function canvasScene(api: Stack) {
     document.removeEventListener("click", beeClick);
     hero.removeEventListener("pointermove", pointer);
     hero.removeEventListener("pointerleave", leave);
-    liveBee = null;
-    bee.dispose();
     ctx.clearRect(0, 0, width, height);
     burstCtx.clearRect(0, 0, innerWidth, innerHeight);
     burstAt = undefined;
@@ -886,8 +942,31 @@ function pointerScene(api: Stack) {
       by?.(0);
     }
   };
-  // Capture event-created quickTo tweens inside the matchMedia context.
-  const onMove = (event: PointerEvent) => withMotion(() => move(event));
+  const pruneTargets = () => {
+    for (const [node, to] of secondary) {
+      if (node.isConnected) continue;
+      to.tween.kill();
+      secondary.delete(node);
+    }
+    for (const targets of [setters, tilts]) {
+      for (const [node, to] of targets) {
+        if (node.isConnected) continue;
+        to.x.tween.kill();
+        to.y.tween.kill();
+        targets.delete(node);
+      }
+    }
+    if (secondaryTarget && !secondaryTarget.isConnected) secondaryTarget = null;
+    if (currentMagnet && !currentMagnet.isConnected) currentMagnet = null;
+    if (currentCard && !currentCard.isConnected) currentCard = null;
+  };
+  const observer = new MutationObserver((records) => {
+    if (records.some((record) => [...record.removedNodes].some((node) => node instanceof Element)))
+      pruneTargets();
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+  // These maps own transient tweens so the scene context cannot retain removed targets.
+  const onMove = move;
   const leave = () => {
     cursor.hidden = true;
     if (secondaryTarget) secondary.get(secondaryTarget)?.(0);
@@ -910,6 +989,14 @@ function pointerScene(api: Stack) {
     window.removeEventListener("blur", leave);
     window.removeEventListener("scroll", invalidateGeometry);
     window.removeEventListener("resize", invalidateGeometry);
+    observer.disconnect();
+    for (const to of secondary.values()) to.tween.kill();
+    for (const targets of [setters, tilts]) {
+      for (const to of targets.values()) {
+        to.x.tween.kill();
+        to.y.tween.kill();
+      }
+    }
     cursor.hidden = true;
     restTransforms([cursor, garden, back, ...secondary.keys(), ...setters.keys()]);
     for (const [node] of tilts) {
@@ -918,6 +1005,12 @@ function pointerScene(api: Stack) {
       node.style.removeProperty("--mouse-y");
       restTransforms([node.querySelector(".card-tilt")]);
     }
+    secondary.clear();
+    setters.clear();
+    tilts.clear();
+    secondaryTarget = null;
+    currentMagnet = null;
+    currentCard = null;
   };
 }
 
@@ -954,6 +1047,7 @@ function tactileScene(api: Stack) {
   const down = (event: PointerEvent) => {
     if (event.button !== 0) return;
     const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest(".bee-home")) return;
     const node = target?.closest<HTMLElement>(pressable) ?? null;
     if (!node || node.matches(":disabled") || node.getAttribute("aria-disabled") === "true") return;
     if (pressed && pressed !== node) release(false);
@@ -972,6 +1066,7 @@ function tactileScene(api: Stack) {
 
   const click = (event: MouseEvent) => {
     const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest(".bee-home")) return;
     const node = target?.closest<HTMLElement>(pressable) ?? null;
     if (!node || node.matches(":disabled")) return;
     withMotion(() => {
@@ -1464,31 +1559,33 @@ function choreography(api: Stack) {
     const fresh = [
       ...document.querySelectorAll<HTMLElement>(".comparison-grid > .model-column"),
     ].filter((node) => !cardTriggers.has(node));
-    for (const [node, triggers] of cardTriggers)
+    for (const [node, triggers] of cardTriggers) {
       if (!node.isConnected) {
         triggers.forEach((trigger) => {
           trigger.kill();
         });
         cardTriggers.delete(node);
       }
+    }
     if (!fresh.length) return;
-    // Keep content visible until the stack loads. Only offscreen cards need a scroll entrance.
     const offscreen = fresh.filter((node) => node.getBoundingClientRect().top > innerHeight);
     fresh.forEach((node) => {
       cardTriggers.set(node, []);
     });
     if (offscreen.length) {
-      // opacity, not autoAlpha: a waiting entrance must never pull answers out of the accessibility tree.
-      gsap.set(
-        offscreen.map((node) => node.querySelector(".card-arrival")),
-        { y: 40, rotationX: 12, opacity: 0 },
-      );
+      for (const node of offscreen) {
+        const plane = node.querySelector<HTMLElement>(".card-arrival");
+        if (plane) {
+          plane.style.transform = "translate3d(0, 40px, 0) rotateX(12deg)";
+          plane.style.opacity = "0";
+        }
+      }
       const triggers = ScrollTrigger.batch(offscreen, {
         start: "top 96%",
         once: true,
         interval: 0.08,
-        onEnter: (nodes) =>
-          gsap.to(
+        onEnter: (nodes) => {
+          return gsap.to(
             nodes.map((node) => node.querySelector(".card-arrival")),
             {
               y: 0,
@@ -1499,7 +1596,8 @@ function choreography(api: Stack) {
               ease: "arenaExpo",
               overwrite: true,
             },
-          ),
+          );
+        },
       });
       offscreen.forEach((node, i) => {
         cardTriggers.set(node, [triggers[i]]);
@@ -1510,6 +1608,7 @@ function choreography(api: Stack) {
   const observer = new MutationObserver(() => withMotion(mountCards));
   const results = document.querySelector("#results");
   if (results) observer.observe(results, { childList: true, subtree: true });
+  const scrambles = new WeakMap<HTMLElement, gsap.core.Tween>();
   const hoverScramble = (event: PointerEvent) => {
     const target =
       event.target instanceof Element ? event.target.closest(".nav-link, .surprise-button") : null;
@@ -1521,23 +1620,28 @@ function choreography(api: Stack) {
     withMotion(() => {
       const text = label.dataset.text ?? label.textContent ?? "";
       label.dataset.text = text;
+      scrambles.get(label)?.kill();
       const decode = { progress: 0 };
-      gsap.to(decode, {
-        progress: 1,
-        duration: 0.32,
-        onUpdate: () => {
-          label.textContent = [...text]
-            .map((char, i) =>
-              char === " " || i / text.length < decode.progress
-                ? char
-                : "01[]+"[(i + Math.floor(decode.progress * 12)) % 5],
-            )
-            .join("");
-        },
-        onComplete: () => {
-          label.textContent = text;
-        },
-      });
+      scrambles.set(
+        label,
+        gsap.to(decode, {
+          progress: 1,
+          duration: 0.32,
+          onUpdate: () => {
+            label.textContent = [...text]
+              .map((char, i) =>
+                char === " " || i / text.length < decode.progress
+                  ? char
+                  : "01[]+"[(i + Math.floor(decode.progress * 12)) % 5],
+              )
+              .join("");
+          },
+          onComplete: () => {
+            label.textContent = text;
+            scrambles.delete(label);
+          },
+        }),
+      );
     });
   };
   document.addEventListener("pointerover", hoverScramble);
@@ -1550,6 +1654,15 @@ function choreography(api: Stack) {
   return () => {
     alive = false;
     observer.disconnect();
+    for (const [node, triggers] of cardTriggers) {
+      triggers.forEach((trigger) => {
+        trigger.kill();
+      });
+      const plane = node.querySelector<HTMLElement>(".card-arrival");
+      plane?.style.removeProperty("transform");
+      plane?.style.removeProperty("opacity");
+    }
+    cardTriggers.clear();
     document.removeEventListener("pointerover", hoverScramble);
     document.removeEventListener("visibilitychange", visibility);
     cleanup.forEach((fn) => {
@@ -1671,12 +1784,118 @@ function flourishScene(api: Stack) {
   const rosterTitle = document.querySelector<HTMLElement>(".roster-title h2");
   if (rosterTitle) cleanups.push(kineticLabel(api, rosterTitle, rosterTitle, 4));
 
-  // Subtitle: a liquid-light spotlight tints the words nearest the pointer while the
-  // model-signal dots breathe. Uses the intro's existing split chars (no double split).
   const lede = document.querySelector<HTMLElement>(".workspace-lede > span:first-child");
   const signal = document.querySelector<HTMLElement>(".model-signal");
+  let signalTimeline: gsap.core.Timeline | undefined;
+  const rippleSignal = (from = 0) => {
+    if (!signal) return;
+    withMotion(() => {
+      signalTimeline?.revert();
+      const dots = [...signal.querySelectorAll<HTMLElement>("i")];
+      if (!dots.length) return;
+      const stagger = { amount: 0.26, from: Math.min(from, dots.length - 1) };
+      signalTimeline = gsap
+        .timeline()
+        .to(dots, {
+          y: -7,
+          rotation: 45,
+          scale: 1.45,
+          opacity: 1,
+          duration: 0.18,
+          stagger,
+          ease: "power2.out",
+        })
+        .to(
+          dots,
+          {
+            y: 0,
+            rotation: 0,
+            scale: 1,
+            opacity: 0.65,
+            duration: 0.48,
+            stagger,
+            ease: "arenaSnap",
+            clearProps: "transform,opacity",
+          },
+          0.18,
+        );
+    });
+  };
+  if (signal) {
+    const rippleAtPointer = (event: PointerEvent) => {
+      if (event.type === "pointerenter" && event.pointerType !== "mouse") return;
+      if (event.type === "pointerdown" && event.pointerType === "mouse") return;
+      const rect = signal.getBoundingClientRect();
+      const fraction = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+      rippleSignal(Math.round(fraction * (signal.childElementCount - 1)));
+    };
+    const observer = new MutationObserver(() => rippleSignal());
+    observer.observe(signal, { childList: true });
+    signal.addEventListener("pointerenter", rippleAtPointer);
+    signal.addEventListener("pointerdown", rippleAtPointer);
+    cleanups.push(() => {
+      observer.disconnect();
+      signal.removeEventListener("pointerenter", rippleAtPointer);
+      signal.removeEventListener("pointerdown", rippleAtPointer);
+      signalTimeline?.revert();
+    });
+  }
+
+  const roster = document.querySelector<HTMLElement>(".model-roster");
+  if (roster) {
+    let selectionTimeline: gsap.core.Timeline | undefined;
+    const observer = new MutationObserver((records) => {
+      const changed = [...new Set(records.map((record) => record.target))].filter(
+        (node): node is HTMLElement => node instanceof HTMLElement && node.matches(".model-toggle"),
+      );
+      if (!changed.length) return;
+      withMotion(() => {
+        selectionTimeline?.revert();
+        const checks = changed.flatMap((node) => [...node.querySelectorAll(".selection-check")]);
+        const logos = changed.flatMap((node) => [...node.querySelectorAll(".model-logo")]);
+        const stagger = { amount: changed.length > 1 ? 0.22 : 0 };
+        selectionTimeline = gsap
+          .timeline()
+          .fromTo(
+            checks,
+            { scale: 0.35, rotation: -90 },
+            {
+              scale: 1,
+              rotation: 0,
+              duration: 0.5,
+              stagger,
+              ease: "arenaSnap",
+              clearProps: "transform",
+            },
+            0,
+          )
+          .fromTo(
+            logos,
+            { y: -5, rotation: -12 },
+            {
+              y: 0,
+              rotation: 0,
+              duration: 0.5,
+              stagger,
+              ease: "arenaSnap",
+              clearProps: "transform",
+            },
+            0.06,
+          );
+      });
+    });
+    observer.observe(roster, {
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["aria-pressed"],
+    });
+    cleanups.push(() => {
+      observer.disconnect();
+      selectionTimeline?.revert();
+    });
+  }
+
   if (lede) {
-    const dots = signal ? [...signal.querySelectorAll<HTMLElement>("i")] : [];
     let chars: HTMLElement[] = [];
     let centers: { x: number; y: number }[] = [];
     let dirty = true;
@@ -1692,22 +1911,7 @@ function flourishScene(api: Stack) {
     const enter = (event: PointerEvent) => {
       if (event.pointerType !== "mouse") return;
       dirty = true;
-      withMotion(() => {
-        if (dots.length)
-          gsap.fromTo(
-            dots,
-            { scale: 1 },
-            {
-              scale: 1.6,
-              duration: 0.45,
-              ease: "arenaSnap",
-              stagger: 0.05,
-              yoyo: true,
-              repeat: 1,
-              overwrite: "auto",
-            },
-          );
-      });
+      rippleSignal();
     };
     const move = (event: PointerEvent) => {
       if (event.pointerType !== "mouse") return;
@@ -1740,10 +1944,6 @@ function flourishScene(api: Stack) {
     const leave = () => {
       lastBucket.clear();
       for (const char of chars) char.style.removeProperty("color");
-      withMotion(() => {
-        if (dots.length)
-          gsap.to(dots, { scale: 1, duration: 0.3, ease: "arenaExpo", overwrite: "auto" });
-      });
     };
     const invalidate = () => {
       dirty = true;
@@ -1760,7 +1960,6 @@ function flourishScene(api: Stack) {
       window.removeEventListener("scroll", invalidate);
       window.removeEventListener("resize", invalidate);
       for (const char of chars) char.style.removeProperty("color");
-      restTransforms(dots);
     });
   }
 
@@ -1969,27 +2168,85 @@ function flourishScene(api: Stack) {
         ry?.((x / rect.width - 0.5) * 12);
       });
     };
-    const leave = () =>
+    const leave = (event: PointerEvent) => {
+      if (event.pointerType !== "mouse") return;
       withMotion(() => {
         gsap.to(lens, { opacity: 0, duration: 0.4, ease: "arenaExpo", overwrite: "auto" });
         rx?.(0);
         ry?.(0);
       });
+    };
     const invalidate = () => {
       rect = null;
+    };
+    let touchStart: { id: number; x: number; y: number } | undefined;
+    let tapBloom: gsap.core.Timeline | undefined;
+    const touchDown = (event: PointerEvent) => {
+      if (event.pointerType === "mouse") return;
+      touchStart = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    };
+    const touchCancel = () => {
+      touchStart = undefined;
+    };
+    const touchUp = (event: PointerEvent) => {
+      const start = touchStart;
+      touchStart = undefined;
+      if (
+        !start ||
+        start.id !== event.pointerId ||
+        Math.hypot(event.clientX - start.x, event.clientY - start.y) > 8
+      )
+        return;
+      withMotion(() => {
+        const bounds = closing.getBoundingClientRect();
+        tapBloom?.revert();
+        lx.tween.pause();
+        ly.tween.pause();
+        lensPos.x = Math.round(event.clientX - bounds.left);
+        lensPos.y = Math.round(event.clientY - bounds.top);
+        applyLens();
+        tapBloom = gsap
+          .timeline()
+          .fromTo(
+            lens,
+            { opacity: 0, scale: 0.65 },
+            {
+              opacity: 1,
+              scale: 1,
+              duration: 0.3,
+              ease: "arenaSnap",
+            },
+          )
+          .to(lens, {
+            opacity: 0,
+            scale: 1.15,
+            duration: 0.45,
+            delay: 0.5,
+            ease: "arenaExpo",
+            clearProps: "transform",
+          });
+        burstAt?.(event.clientX, event.clientY, 8);
+      });
     };
     closing.addEventListener("pointerenter", enter);
     closing.addEventListener("pointermove", move);
     closing.addEventListener("pointerleave", leave);
+    closing.addEventListener("pointerdown", touchDown, { passive: true });
+    closing.addEventListener("pointerup", touchUp, { passive: true });
+    closing.addEventListener("pointercancel", touchCancel, { passive: true });
     window.addEventListener("scroll", invalidate, { passive: true });
     window.addEventListener("resize", invalidate);
     cleanups.push(() => {
       closing.removeEventListener("pointerenter", enter);
       closing.removeEventListener("pointermove", move);
       closing.removeEventListener("pointerleave", leave);
+      closing.removeEventListener("pointerdown", touchDown);
+      closing.removeEventListener("pointerup", touchUp);
+      closing.removeEventListener("pointercancel", touchCancel);
       window.removeEventListener("scroll", invalidate);
       window.removeEventListener("resize", invalidate);
       gsap.killTweensOf(lens);
+      tapBloom?.revert();
       lens.remove();
       restTransforms([plane]);
     });
@@ -2004,8 +2261,16 @@ function flourishScene(api: Stack) {
 export function startMotionClock() {
   clockInstances++;
   const api = motionStack();
+  const bee = createBee((x, y, count, tint) => burstAt?.(x, y, count, tint));
+  liveBee = bee;
+  bee.setEnabled(beeEnabled);
+  const stopPet = () => {
+    bee.dispose();
+    if (liveBee === bee) liveBee = null;
+  };
   const tick = (_time: number, delta: number) => {
     const now = Date.now();
+    if (!document.hidden) bee.update(Math.min(delta / 1000, 0.04), now);
     for (const listener of clockListeners) listener(now, delta);
   };
   if (api) {
@@ -2014,6 +2279,7 @@ export function startMotionClock() {
     document.documentElement.dataset.motionEngine = "gsap";
     return () => {
       clockInstances--;
+      stopPet();
       api.gsap.ticker.remove(tick);
       delete document.documentElement.dataset.motionEngine;
     };
@@ -2023,6 +2289,7 @@ export function startMotionClock() {
   const timer = window.setInterval(() => tick(0, 100), 100);
   return () => {
     clockInstances--;
+    stopPet();
     clearInterval(timer);
     delete document.documentElement.dataset.motionEngine;
   };
@@ -2038,6 +2305,8 @@ export function startChoreography(paused: boolean) {
     api.gsap.registerPlugin(api.Flip, api.ScrollTrigger, api.SplitText, api.CustomEase);
     api.CustomEase.create("arenaExpo", "M0,0 C0.16,1 0.3,1 1,1");
     api.CustomEase.create("arenaSnap", "M0,0 C0.34,1.56 0.64,1 1,1");
+    // Material 3 emphasized-decelerate (androidx MotionTokens: 0.05, 0.7, 0.1, 1).
+    api.CustomEase.create("themeLift", "M0,0 C0.16,0.5 0.3,1 1,1");
     context = ctx;
     stack = api;
     lenis = new api.Lenis({
@@ -2062,7 +2331,8 @@ export function startChoreography(paused: boolean) {
       api.gsap.set(document.querySelectorAll(layoutSelector), {
         clearProps: "transform,width,height,top,left,position",
       });
-      document.querySelector(".comparison-grid")?.classList.remove("is-flipping");
+      for (const node of document.querySelectorAll(".model-column.is-flipping"))
+        node.classList.remove("is-flipping");
       clearExits();
       api.ScrollTrigger.refresh();
     };
@@ -2077,6 +2347,8 @@ export function startChoreography(paused: boolean) {
       captured = undefined;
       departed = [];
       clearExits();
+      for (const node of document.querySelectorAll(".model-column.is-flipping"))
+        node.classList.remove("is-flipping");
       window.removeEventListener("resize", resizeLayout);
       scrollClock();
       stopCanvas();

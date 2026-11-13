@@ -32,31 +32,6 @@ export default {
         "stamp-acid": "none",
         card: "none",
       },
-      keyframes: {
-        rise: {
-          "0%": { opacity: "0", transform: "translateY(10px)" },
-          "100%": { opacity: "1", transform: "translateY(0)" },
-        },
-        shimmer: {
-          "0%": { transform: "translateX(-100%)" },
-          "100%": { transform: "translateX(200%)" },
-        },
-        scan: {
-          "0%": { top: "0%" },
-          "50%": { top: "92%" },
-          "100%": { top: "0%" },
-        },
-        blink: {
-          "0%, 100%": { opacity: "1" },
-          "50%": { opacity: "0.25" },
-        },
-      },
-      animation: {
-        rise: "rise 0.3s cubic-bezier(0.22, 1, 0.36, 1) both",
-        shimmer: "shimmer 1.5s linear infinite",
-        scan: "scan 1.8s ease-in-out infinite",
-        blink: "blink 1.1s ease-in-out infinite",
-      },
     },
   },
   plugins: [],

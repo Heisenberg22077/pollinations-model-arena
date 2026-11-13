@@ -3,16 +3,18 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { DEFAULT_PROMPT, MAX_PROMPT_LENGTH, type ModelDef, STARTER_PROMPTS } from "../config";
 import { SURPRISE_PROMPTS } from "../data/surpriseQuestions";
 import type { ColorMode } from "../hooks/useColorMode";
-import { surprisePollen } from "../lib/arena-motion";
+import { beeComment, surprisePollen, withMotion } from "../lib/arena-motion";
 import { formatLatency, formatPollen } from "../lib/format";
 import { animateFeedback } from "../lib/motion";
 import type { HealthStatus, RecentRun } from "../types";
 import { AnimatedDetails } from "./AnimatedDisclosure";
+import { BeePet } from "./BeePet";
 import { GardenScene } from "./GardenScene";
 import { ModelRoster } from "./ModelRoster";
 import { ScrambleText } from "./ScrambleText";
 
 const STARTER_LABELS = ["Humans", "Love", "Inventions", "Ask us"];
+const QUESTION_PIXELS = Array.from({ length: 12 }, (_, index) => `question-pixel-${index}`);
 
 export function PromptComposer({
   prompt,
@@ -44,6 +46,57 @@ export function PromptComposer({
   const surpriseQueue = useRef<string[]>([]);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const [recentOpen, setRecentOpen] = useState(false);
+  const questionTimeline = useRef<gsap.core.Timeline | undefined>(undefined);
+
+  useLayoutEffect(
+    () => () => {
+      questionTimeline.current?.revert();
+    },
+    [],
+  );
+
+  const chooseQuestion = (next: string) => {
+    setPrompt(next);
+    const input = promptRef.current;
+    if (!input) return;
+    withMotion(({ gsap }) => {
+      questionTimeline.current?.revert();
+      const pixels = input.closest(".question-band")?.querySelectorAll(".question-transfer i");
+      questionTimeline.current = gsap
+        .timeline()
+        .fromTo(
+          input,
+          { y: 6, opacity: 0.6 },
+          { y: 0, opacity: 1, duration: 0.4, ease: "arenaExpo", clearProps: "transform,opacity" },
+        );
+      if (pixels?.length)
+        questionTimeline.current
+          .fromTo(
+            pixels,
+            { scaleX: 0, y: 0, opacity: 0 },
+            {
+              scaleX: 1,
+              opacity: 1,
+              duration: 0.16,
+              stagger: { amount: 0.22 },
+              ease: "power2.out",
+            },
+            0,
+          )
+          .to(
+            pixels,
+            {
+              y: -5,
+              opacity: 0,
+              duration: 0.36,
+              stagger: { amount: 0.22 },
+              ease: "power2.out",
+              clearProps: "transform,opacity",
+            },
+            0.24,
+          );
+    });
+  };
 
   // Clamp the popover to the space actually available and flip it above the
   // summary on short landscape screens, where five long entries overflow.
@@ -97,7 +150,7 @@ export function PromptComposer({
     if (queue.length > 1 && queue[queue.length - 1] === prompt) {
       [queue[0], queue[queue.length - 1]] = [queue[queue.length - 1], queue[0]];
     }
-    setPrompt(queue.pop() ?? DEFAULT_PROMPT);
+    chooseQuestion(queue.pop() ?? DEFAULT_PROMPT);
   };
 
   return (
@@ -134,10 +187,18 @@ export function PromptComposer({
           </p>
         </div>
 
-        <GardenScene colorMode={colorMode} />
+        <div className="garden-pet">
+          <GardenScene colorMode={colorMode} />
+          <BeePet />
+        </div>
 
         <div className="question-band">
           <span className="launch-shockwave" aria-hidden="true" />
+          <span className="question-transfer" aria-hidden="true">
+            {QUESTION_PIXELS.map((pixel) => (
+              <i key={pixel} />
+            ))}
+          </span>
           <div className="question-label-row">
             <label htmlFor="prompt">Your question</label>
             <span className="question-counter">
@@ -159,16 +220,8 @@ export function PromptComposer({
                   "bouncy",
                 );
                 surprise();
+                beeComment("surprise");
                 surprisePollen();
-                animateFeedback(
-                  promptRef.current,
-                  [
-                    { opacity: 0.5, transform: "translateY(4px)" },
-                    { opacity: 1, transform: "translateY(0)" },
-                  ],
-                  undefined,
-                  "fluid",
-                );
               }}
               className="surprise-button"
               aria-label="Surprise me"
@@ -199,7 +252,10 @@ export function PromptComposer({
                 <button
                   key={question}
                   type="button"
-                  onClick={() => setPrompt(question)}
+                  onClick={() => {
+                    chooseQuestion(question);
+                    beeComment("starter", STARTER_LABELS[index]);
+                  }}
                   aria-label={question}
                   title={question}
                   className="composer-chip"
@@ -243,7 +299,7 @@ export function PromptComposer({
                     key={recent.id}
                     type="button"
                     onClick={() => {
-                      setPrompt(recent.prompt);
+                      chooseQuestion(recent.prompt);
                       setRecentOpen(false);
                       promptRef.current?.focus({ preventScroll: true });
                     }}

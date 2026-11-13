@@ -491,7 +491,7 @@ button {
 }
 .model-signal {
   display: inline-flex;
-  height: 12px;
+  height: 24px;
   flex-shrink: 0;
   align-items: center;
   gap: 5px;
@@ -523,6 +523,20 @@ button {
 .question-band:focus-within::before {
   opacity: 1;
   transform: scale(1);
+}
+.question-transfer {
+  position: absolute;
+  inset: -2px 12px auto;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 4px;
+  height: 4px;
+  pointer-events: none;
+}
+.question-transfer i {
+  background: rgb(var(--accent-ink));
+  transform-origin: left center;
+  opacity: 0;
 }
 .question-label-row {
   display: flex;
@@ -973,6 +987,42 @@ summary[aria-expanded="true"] .guide-chevron {
   grid-template-columns: repeat(var(--columns), minmax(0, 1fr));
   align-items: start;
   gap: 12px;
+}
+.run-trail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 14px 0 12px;
+  padding: 0;
+  list-style: none;
+}
+@media (min-width: 1024px) {
+  .mobile-menu-button[data-focus-restoring] {
+    display: flex;
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 24px;
+    background: rgb(var(--raised));
+  }
+}
+.trail-pixel {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 1px solid rgb(var(--line));
+  color: rgb(var(--foreground));
+  background: rgb(var(--surface));
+  font:
+    13px / 1 "Geist Mono",
+    monospace;
+}
+.run-trail [data-status="done"] .trail-pixel {
+  border-color: var(--provider-color);
+  background: color-mix(in srgb, var(--provider-color) 25%, rgb(var(--raised)));
+}
+.run-trail [data-status="error"] .trail-pixel {
+  border-style: dashed;
 }
 .model-column {
   --ink: var(--foreground);
@@ -1704,8 +1754,10 @@ summary:focus-visible,
 .comparison-grid[data-count="1"] {
   --columns: 1;
 }
-.comparison-grid[data-count="2"] {
-  --columns: 2;
+@media (min-width: 680px) {
+  .comparison-grid[data-count="2"] {
+    --columns: 2;
+  }
 }
 @media (min-width: 1100px) {
   .comparison-grid[data-count="3"] {
@@ -1833,6 +1885,9 @@ summary:focus-visible,
     padding-inline: 8px;
   }
   .brand-link {
+    container: header-brand / inline-size;
+    flex: 0 1 7em;
+    min-width: 26px;
     gap: 7px;
   }
   .brand-symbol {
@@ -1849,6 +1904,7 @@ summary:focus-visible,
     word-spacing: 0;
   }
   .header-account {
+    flex-shrink: 0;
     gap: 4px;
   }
   .header-account polli-connect button {
@@ -1870,8 +1926,6 @@ summary:focus-visible,
     height: 44px;
     border-color: transparent;
   }
-  /* Phones keep the theme switch in the menu so the wide unconnected Connect
-     widget always fits beside the brand without overlapping anything. */
   .header-account .theme-button {
     display: none;
   }
@@ -1905,8 +1959,13 @@ summary:focus-visible,
     margin-top: 12px;
     font-size: 13px;
   }
+  .workspace-lede {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
   .model-signal {
-    display: none;
+    flex-basis: 100%;
+    height: 24px;
   }
   .question-band {
     padding: 10px 12px;
@@ -2044,10 +2103,12 @@ summary:focus-visible,
     height: 65dvh;
   }
 }
-@media (max-width: 359px) {
+@container header-brand (width < 7em) {
   .brand-wordmark {
     display: none;
   }
+}
+@media (max-width: 359px) {
   .question-counter {
     display: none;
   }
@@ -2077,24 +2138,50 @@ summary:focus-visible,
   pointer-events: none;
   image-rendering: pixelated;
 }
+.garden-pet {
+  grid-area: garden;
+  min-width: 0;
+  position: relative;
+}
+.bee-home {
+  position: absolute;
+  top: 0;
+  left: 8px;
+  z-index: 2;
+}
+.bee-home > summary {
+  min-width: 44px;
+  min-height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 4px 8px;
+  border: 1px solid rgb(var(--foreground) / 0.2);
+  background: rgb(var(--raised) / 0.9);
+  font:
+    12px "Geist Mono",
+    monospace;
+  list-style: none;
+}
+.bee-home > summary::-webkit-details-marker {
+  display: none;
+}
 .bee-bubble {
   position: fixed;
   top: 0;
   left: 0;
-  z-index: 90;
-  max-width: 240px;
+  z-index: 45;
+  max-width: min(240px, calc(100vw - 24px));
   padding: 7px 11px;
   border: 1px solid var(--bee-bubble-line, rgb(245 158 11 / 0.6));
   background: var(--bee-bubble-bg, rgb(28 27 24 / 0.92));
   color: var(--bee-bubble-ink, #f4efe6);
   font-family: "Geist Mono", monospace;
-  font-size: 12px;
-  line-height: 1.35;
+  font-size: 14px;
+  line-height: 1.4;
   letter-spacing: 0.01em;
   pointer-events: none;
   opacity: 0;
-  transform: translate3d(-999px, -999px, 0);
-  transition: opacity 0.22s ease;
+  transition: opacity 0.15s ease;
   box-shadow: 3px 3px 0 rgb(var(--shadow) / 0.18);
 }
 .bee-bubble.is-visible {
@@ -2102,6 +2189,44 @@ summary:focus-visible,
 }
 .bee-bubble-text {
   display: block;
+}
+.bee-controls {
+  position: absolute;
+  top: 90px;
+  left: 0;
+  display: flex;
+  width: 208px;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgb(var(--foreground) / 0.2);
+  background: rgb(var(--raised));
+}
+.bee-home .bee-controls > button {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 4px 6px;
+  border: 1px solid rgb(var(--foreground) / 0.18);
+  color: rgb(var(--muted));
+  font-size: 12px;
+}
+.bee-home .bee-controls > button:focus-visible {
+  outline: 2px solid rgb(var(--foreground));
+  outline-offset: 2px;
+}
+.bee-controls [hidden] {
+  display: none;
+}
+.bee-home.has-snack::after {
+  position: absolute;
+  top: 14px;
+  left: 64px;
+  width: 10px;
+  height: 10px;
+  content: "";
+  background: #ef4444;
+  box-shadow:
+    0 -3px 0 #65a30d,
+    3px 3px 0 #b91c1c;
 }
 .bee-button[aria-pressed="false"] {
   opacity: 0.5;
@@ -2200,8 +2325,8 @@ summary:focus-visible,
   pointer-events: none;
   content-visibility: visible;
 }
-/* While Flip measures/animates, render real card heights so cards land on the correct row. */
-.comparison-grid.is-flipping .model-card {
+/* Only visible FLIP participants need to bypass deferred content rendering. */
+.model-card.is-flipping {
   content-visibility: visible;
 }
 .accordion-grid {
@@ -2454,7 +2579,6 @@ summary:focus-visible,
   aspect-ratio: 1;
   border-radius: 50%;
   opacity: 0.55;
-  will-change: transform;
 }
 .aura-blob-a {
   left: -6%;

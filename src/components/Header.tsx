@@ -11,7 +11,7 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { REPO_URL } from "../config";
 import { useBee } from "../hooks/useBee";
 import type { ColorMode } from "../hooks/useColorMode";
@@ -69,6 +69,7 @@ export function Header({
   const motionLabel = paused ? "Resume animations" : "Pause animations";
   const beeLabel = beeEnabled ? "Send the bee away" : "Release the garden bee";
   const soundLabel = soundOn ? "Mute sound" : "Unmute sound";
+  const menuRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const hint = document.querySelector<HTMLElement>(".connection-hint");
     if (apiKey && hint) hint.hidden = true;
@@ -128,7 +129,13 @@ export function Header({
           </a>
         </nav>
 
-        <button type="button" popoverTarget="mobile-navigation" className="mobile-menu-button">
+        <button
+          ref={menuRef}
+          onBlur={(event) => event.currentTarget.removeAttribute("data-focus-restoring")}
+          type="button"
+          popoverTarget="mobile-navigation"
+          className="mobile-menu-button"
+        >
           Menu <ChevronDown className="h-3 w-3" aria-hidden="true" />
         </button>
         <nav
@@ -136,6 +143,18 @@ export function Header({
           popover="auto"
           className="mobile-navigation"
           aria-label="Mobile navigation"
+          onToggle={(event) => {
+            if (event.currentTarget.matches(":popover-open"))
+              event.currentTarget
+                .querySelector<HTMLAnchorElement>("a")
+                ?.focus({ preventScroll: true });
+            else {
+              const menu = menuRef.current;
+              if (menu && window.matchMedia("(min-width: 1024px)").matches)
+                menu.setAttribute("data-focus-restoring", "");
+              menu?.focus({ preventScroll: true });
+            }
+          }}
         >
           {/* biome-ignore lint/a11y/useValidAnchor: This href navigates to the lineup; the handler only dismisses the popover. */}
           <a
@@ -186,6 +205,8 @@ export function Header({
           </button>
           <button
             type="button"
+            aria-label="Garden bee"
+            aria-pressed={beeEnabled}
             onClick={() => {
               toggleBee();
               document.getElementById("mobile-navigation")?.hidePopover();
@@ -194,7 +215,12 @@ export function Header({
             {beeLabel}
             <BeeGlyph className="h-4 w-4" />
           </button>
-          <button type="button" onClick={toggleSound}>
+          <button
+            type="button"
+            onClick={toggleSound}
+            aria-label="Background music"
+            aria-pressed={soundOn}
+          >
             {soundLabel}
             {soundOn ? (
               <Volume2 className="h-4 w-4" aria-hidden="true" />
@@ -255,7 +281,7 @@ export function Header({
               );
               toggleBee();
             }}
-            aria-label={beeLabel}
+            aria-label="Garden bee"
             aria-pressed={beeEnabled}
             title={beeLabel}
             className="icon-button bee-button"
@@ -265,7 +291,7 @@ export function Header({
           <button
             type="button"
             onClick={toggleSound}
-            aria-label={soundLabel}
+            aria-label="Background music"
             aria-pressed={soundOn}
             title={soundLabel}
             className="icon-button bee-sound-button"

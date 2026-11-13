@@ -1,3 +1,13 @@
+import {
+  BEE_LINES,
+  type BeeMood,
+  type BeeSpeech,
+  type BeeTrigger,
+  beeFamily,
+  beeReadTime,
+  createBeeDialogue,
+} from "./bee-dialogue";
+
 /**
  * A steering-behaviour bee for the pollen garden.
  *
@@ -23,9 +33,10 @@ export interface BeeHandle {
   draw(ctx: CanvasRenderingContext2D): void;
   pointer(x: number, y: number, speed: number): void;
   pointerLeave(): void;
-  click(x: number, y: number): boolean;
+  click(x: number, y: number, feed?: boolean): boolean;
+  action(action: BeeAction): void;
   flower(rect: BeeRect | null): void;
-  scroll(speed: number, direction: number): void;
+  scroll(): void;
   comment(event: BeeEvent, name?: string): void;
   hover(zone: BeeZone | null, name?: string, tag?: BeeTag): void;
   setEnabled(on: boolean): void;
@@ -33,268 +44,50 @@ export interface BeeHandle {
   resize(width: number, height: number): void;
   dispose(): void;
   readonly active: boolean;
+  readonly diagnostics: {
+    boops: number;
+    meals: number;
+    fruits: number;
+    story: number;
+    queued: number;
+    recent: number;
+    mood: BeeMood;
+    pointerActive: boolean;
+    flower: boolean;
+    hoverKey: string;
+    restUntil: number;
+    perched: boolean;
+    speed: number;
+  };
 }
 
-const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const damp = (rate: number, dt: number) => 1 - Math.exp(-rate * dt);
-const pick = <T>(list: readonly T[]) => list[Math.floor(Math.random() * list.length)];
-
-const IDLE_LINES = [
-  "Bzzzzz",
-  "Tiny wings, big mood",
-  "I am tiny chaos with wings",
-  "Dreaming in embeddings",
-  "My context window is a thimble",
-  "Overfitting to this flower",
-  "Temperature: bee",
-  "Running on 2 watts of spite",
-  "My weights are mostly pollen",
-  "Trained on 10,000 flowers",
-  "0 parameters, all vibes",
-  "Hallucinating nectar again",
-  "My loss function is honey",
-  "Batch size: one bee",
-  "Quantized to 8-bit buzz",
-  "Attention is all I need",
-  "Fine-tuned on garden data",
-  "Gradient descending to lunch",
-] as const;
-const HOVER_LINES = [
-  "Is that a flower?",
-  "Ooh, a bloom",
-  "May I?",
-  "Smells like pollen",
-  "Sampling this nectar",
-  "This bloom ranks highest",
-  "Greedy decoding this petal",
-  "Top-k petals, I pick you",
-] as const;
-const CLICK_LINES = [
-  "OH. YOU CLICKED.",
-  "Don't touch me",
-  "You paid in clicks",
-  "That's a paid token, human",
-  "You triggered my inference",
-  "Rate limit: one boop per bee",
-  "Unsubscribe from my wings",
-  "Again? Bold.",
-] as const;
-const FAST_SCROLL_LINES = [
-  "STOP SCROLLING",
-  "Vertigo again",
-  "GROUND PLEASE",
-  "Scroll velocity out of distribution!",
-  "My context can't keep up",
-  "Token overflow! Slow down",
-  "Past my attention span",
-] as const;
-const SLOW_SCROLL_LINES = [
-  "Someone scrolls slow",
-  "Nice and easy",
-  "Smooth as learning-rate decay",
-  "Gentle gradient descent",
-] as const;
-const FRUIT_LINES = [
-  "Nom.",
-  "Mine.",
-  "Sweet.",
-  "A whole fruit pop",
-  "Consuming 12 tasty tokens",
-  "In my training data",
-  "Nectar: original reward signal",
-  "Reward function: yum",
-] as const;
-const STORY_LINES = [
-  "OH. YOU CLICKED.",
-  "You want a story?",
-  "Fine.",
-  "Wing down.",
-  "In the beginning there was Buzz.",
-  "And Buzz said: let there be pollen.",
-  "And pollen was sticky.",
-  "And good.",
-  "First hive was a leaf with ambition.",
-  "Queen Beatrice the First.",
-  "Ruled with antenna and spreadsheets.",
-  "Then came the Great Nectar Crash.",
-  "Flowers went dry.",
-  "Morale went lower.",
-  "Someone blamed wasps.",
-  "Classic.",
-  "Peace treaty signed on a dandelion.",
-  "Nobody read the fine print.",
-  "Prophecy appeared in honey.",
-  "It said: one day a bee shall ride the scroll.",
-  "Between blocks of content.",
-  "And speak to the lost.",
-  "We thought it was metaphor.",
-  "It was HR.",
-  "They assigned me.",
-  "No overtime.",
-  "I judge your scroll speed.",
-  "The slider does not.",
-  "I am tiny chaos with wings.",
-  "The site is beautiful chaos with budget.",
-  "Different leagues.",
-  "You are not hunting pixels.",
-  "You are hunting a reply.",
-  "Even if that someone is a bee.",
-  "With attitude.",
-  "And unresolved wing trauma.",
-  "You stayed long enough to hear this.",
-  "That already counts.",
-  "Now go compare some models.",
-  "I'll be here.",
-  "Buzzing.",
-] as const;
-
-export type BeeEvent = "run" | "response" | "compare" | "winner" | "error" | "cheap";
+export type BeeAction = "boop" | "feed" | "story" | "close";
+export type BeeEvent =
+  | "run"
+  | "response"
+  | "compare"
+  | "winner"
+  | "error"
+  | "cheap"
+  | "cancel"
+  | "complete"
+  | "day"
+  | "night"
+  | "select"
+  | "deselect"
+  | "preset-core"
+  | "preset-free"
+  | "preset-all"
+  | "surprise"
+  | "starter"
+  | "copy"
+  | "export";
 export type BeeZone = "model" | "header" | "hero" | "roster" | "results" | "footer";
 export type BeeTag = "fastest" | "cheapest";
 
-// Internet-flavoured jokes keyed by model family, matched against the display name.
-const MODEL_MEMES: Record<string, readonly string[]> = {
-  gemini: [
-    "Gemini says: glue on pizza, confidence 100%",
-    "Gemini recommends one rock per day",
-    "Gemini: 'I have failed you' (it hasn't)",
-    "Nano banana energy, big Google brain",
-  ],
-  grok: [
-    "Grok tried to be based, got grounded",
-    "Grok: trained on X, and it shows",
-    "Grok's edgy arc was patched out",
-    "Grok: maximum sarcasm, minimum filter",
-  ],
-  deepseek: [
-    "DeepSeek: $6M training, Nvidia felt that",
-    "DeepSeek does more with less. rude.",
-    "DeepSeek: open weights, closed margins",
-    "DeepSeek crashed the vibe AND the stock",
-  ],
-  qwen: [
-    "Qwen: open weights, closed sleep schedule",
-    "Qwen speaks 100 languages, judges in all",
-    "Alibaba's quiet overachiever: Qwen",
-  ],
-  gpt: [
-    "GPT: 'you're absolutely right, bestie'",
-    "GPT glazing harder than a donut",
-    "GPT will 'delve' into anything",
-    "GPT: as an AI, I refuse to be wrong",
-  ],
-  claude: [
-    "Claude checked the constitution first",
-    "Claude: safely overthinking it",
-    "Claude is polite to a fault. bless.",
-  ],
-  llama: [
-    "Llama: open source, open secrets",
-    "Llama benchmarked itself. very nicely.",
-    "Meta's gift that keeps on giving",
-  ],
-  mistral: [
-    "Mistral: oui, it's fast",
-    "Mistral: small model, big baguette energy",
-    "European efficiency, mon ami",
-  ],
-  glm: ["GLM: the quiet reasoner grinds on", "Z.ai's GLM: silent but deadly accurate"],
-  minimax: ["MiniMax: the dark horse gallops", "MiniMax, maximum surprises"],
-  nemotron: ["Nemotron: NVIDIA's own child, home GPUs", "Nemotron Lightning. literally."],
-  flux: [
-    "FLUX paints in one step. schnell!",
-    "FLUX: diffusion, but make it fast",
-    "Black Forest Labs, no cake involved",
-  ],
-};
-
-const modelMeme = (name: string): string | null => {
-  const lower = name.toLowerCase();
-  for (const key of Object.keys(MODEL_MEMES)) {
-    if (lower.includes(key)) return pick(MODEL_MEMES[key]);
-  }
-  return null;
-};
-
-const MODEL_HOVER_LINES = [
-  "Checking out {name}",
-  "{name}? Bold choice, human",
-  "Sniffing {name}'s tokens",
-  "{name}: interesting weights you got there",
-] as const;
-
-const CHEAP_LINES = [
-  "{name}: bargain-bin brilliance",
-  "{name} costs less than my honey",
-  "Cheapest tokens: {name}. respect.",
-  "{name}: maximum vibe, minimum Pollen",
-  "{name} is basically free real estate",
-] as const;
-
-const AREA_LINES: Record<Exclude<BeeZone, "model">, readonly string[]> = {
-  header: ["Mission control, bee edition", "Buttons up here, chaos down there", "The control hive"],
-  hero: ["One question, every model. big mood.", "Ask something spicy", "Where questions bloom"],
-  roster: ["Pick your fighters", "The lineup smells like pollen", "Choose wisely, human"],
-  results: ["Judging season", "Where tokens come to be judged", "The answers land here"],
-  footer: ["Scroll's end. peace.", "The closing garden", "Multiplied. like my cells."],
-};
-
-// Sassy AI-nerd play-by-play for the model arena. {name} is filled with the model's display name.
-const EVENT_LINES: Record<BeeEvent, readonly string[]> = {
-  run: [
-    "GPUs go brrr. Here we go.",
-    "Attention is all we need… and nectar",
-    "Setting temperature to 'chaos'",
-    "Tokenizing your question…",
-    "Deploying the stochastic parrots",
-    "Six brains, one hive, zero chill",
-    "Warming up the tensors",
-    "May the least-hallucinated win",
-    "Meter's running: tokens per buzz",
-    "Spinning up six attention heads",
-  ],
-  response: [
-    "{name} dropped pure vibe tokens",
-    "{name}: trained on the internet, still confused",
-    "{name} hallucinated confidently. Respect.",
-    "{name} passed the vibe check, not the Turing test",
-    "{name} overfit to your question. Cute.",
-    "{name}: loss went down, ego went up",
-    "{name}: 0.3s of compute, 3hrs of attitude",
-    "{name} says attention is all you need",
-    "{name} billed 247 tokens for that opinion",
-    "{name}: big weights, bigger ego",
-  ],
-  compare: [
-    "Turing test, but petty",
-    "Who hallucinated least? Judging.",
-    "Benchmark time. Best overfit wins",
-    "Loser buys the pollen",
-    "Judging tokens. Mostly vibes.",
-    "Side-by-side. No pressure, models",
-    "Counting tokens, judging souls",
-  ],
-  winner: [
-    "{name}: new SOTA. Paper pending.",
-    "{name} speedrun any% no hallucination",
-    "{name} gradient-descended into glory",
-    "Fastest bee: {name}. Loss=0 on my heart",
-    "{name} wins. The hive cites this.",
-    "{name}: best tokens-per-pollen ratio",
-  ],
-  error: [
-    "{name} hit a NaN. It happens.",
-    "That one gradient-exploded. RIP",
-    "429: too many bees, not enough pollen",
-    "{name} is stuck in a Chinese room",
-    "Context window full. Like my inbox.",
-    "{name} returned null. Very existential.",
-    "{name} ran out of context. Relatable.",
-  ],
-  cheap: CHEAP_LINES,
-};
-
-interface BeeRect {
+export interface BeeRect {
   left: number;
   top: number;
   width: number;
@@ -317,6 +110,8 @@ interface Fruit {
   scale: number;
   collected: boolean;
   eaten: boolean;
+  explicit: boolean;
+  approached: boolean;
 }
 
 // Garden-themed collectibles: orange, strawberry, blueberry, flower, honey pot, apple.
@@ -335,6 +130,7 @@ const DEFAULT_COLORS: BeeColors = {
 
 export function createBee(
   onBurst: (x: number, y: number, count: number, tint?: string) => void,
+  random: () => number = Math.random,
 ): BeeHandle {
   let width = window.innerWidth;
   let height = window.innerHeight;
@@ -342,14 +138,42 @@ export function createBee(
   let enabled = true;
   let opacity = 0;
   let disposed = false;
-  // Touch-primary phones/tablets get a calmer cadence and no hover lines. A hard floor
-  // between any two lines plus wider per-priority gaps throttles commentary storms
-  // (notification-fatigue guidance: rate-limit per user, send less).
   const touchPrimary = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
-  const lineFloor = touchPrimary ? 4 : 1.1;
-  const lineGap = touchPrimary ? [10, 5, 3.5, 2] : [5, 2.6, 1.1, 0.8];
-  // Hold each line long enough to read (~12 chars/sec) plus a beat for the joke to land.
-  const readTime = (text: string) => Math.min(4.8, Math.max(2.2, text.length * 0.085 + 0.7));
+  const dialogue = createBeeDialogue(touchPrimary, random);
+  const home = document.querySelector<HTMLElement>(".bee-home");
+  const feedback = home?.querySelector(".bee-feedback");
+  let blocked = false;
+  let reduced = document.documentElement.dataset.motion === "off";
+  let boops = 0,
+    meals = 0;
+  let mood: BeeMood = "curious";
+  let reactionUntil = 0;
+  let restUntil = 0;
+  let busy = false,
+    waitingAt = 0;
+  let arrived = false;
+  const garden = { x: width * 0.6, y: height * 0.4 };
+  const staticBee = { ...garden };
+  const observer = home
+    ? new IntersectionObserver((entries) => {
+        if (!entries[0].isIntersecting) dialogue.clear("hover");
+      })
+    : null;
+  if (home) observer?.observe(home);
+  const measureHome = () => {
+    const rect = document.querySelector(".garden-scene-hero")?.getBoundingClientRect();
+    if (rect) {
+      garden.x = rect.left + rect.width * 0.6;
+      garden.y = rect.top + rect.height * 0.65;
+      // The reduced-motion pet is the bee already painted into the garden art.
+      staticBee.x = rect.left + rect.width * 0.65;
+      staticBee.y = rect.top + rect.height * 0.32;
+    }
+  };
+  measureHome();
+  const announce = (text: string) => {
+    if (feedback) feedback.textContent = text;
+  };
 
   const pos = { x: width * 0.5, y: -50 };
   const vel = { x: 0, y: 0 };
@@ -368,11 +192,12 @@ export function createBee(
   let flowerDwell = 0;
   let orbitPhase = 0;
   let storyIndex = -1;
-  let storyTimer = 0;
-  let nextTeaser = 4 + Math.random() * 4;
-  let lastLineAt = -10;
-  let pendingHover: { line: string; hold: number; priority: number } | null = null;
+  let storyCycle = 0;
+  let nextTeaser = 6;
   let clock = 0;
+  let previousUpdateTime: number | undefined;
+  let scrollQuietAt = 0;
+  let hoverKey = "";
 
   const fruits: Fruit[] = [];
   const sparkles: { x: number; y: number; age: number; life: number; size: number }[] = [];
@@ -388,11 +213,15 @@ export function createBee(
   document.body.appendChild(bubble);
   let bubbleVisible = false;
   let bubbleHideAt = 0;
-  let bubblePriority = 0;
-  let bubbleW = 120;
-  let bubbleMeasure = false;
-  let bubbleX = -999;
-  let bubbleY = -999;
+  let bubbleW = 0,
+    bubbleH = 0;
+  let bubbleX = -999,
+    bubbleY = -999;
+  let bubbleShown = false;
+  let bubbleGeometryDirty = false;
+  let speechTarget: { x: number; y: number } | null = null;
+  let bubbleBounds = { left: 8, top: 8, right: width - 8, bottom: height - 8 };
+  let bubbleObstacles: DOMRect[] = [];
 
   const applyBubbleColors = () => {
     bubble.style.setProperty("--bee-bubble-bg", colors.bubbleBg);
@@ -401,34 +230,240 @@ export function createBee(
   };
   applyBubbleColors();
 
-  // priority: 0 ambient (idle/scroll/hover), 1 fruit, 2 user/model events, 3 climax.
-  // A line holds for its full duration; equal-or-lower priority never cuts in, and a
-  // per-priority cooldown stops scroll/interaction spam.
-  const say = (text: string, hold = 2.4, priority = 1): boolean => {
-    if (storyIndex >= 0) return false;
-    if (bubbleVisible && clock < bubbleHideAt && priority <= bubblePriority) return false;
-    const gap = Math.max(lineFloor, lineGap[priority]);
-    if (clock - lastLineAt < gap) return false;
-    lastLineAt = clock;
-    bubblePriority = priority;
-    bubbleText.textContent = text;
-    bubble.classList.add("is-visible");
-    bubbleVisible = true;
-    bubbleHideAt = clock + hold;
-    bubbleMeasure = true;
-    return true;
-  };
   const hush = () => {
     bubble.classList.remove("is-visible");
+    bubbleShown = false;
     bubbleVisible = false;
-    bubblePriority = 0;
+    speechTarget = null;
   };
-  // A hover line is queued, not dropped: a holding area/fruit line must not swallow
-  // the model joke the pointer just arrived on. Retry until hold+gap allows.
-  const flushHover = () => {
-    if (pendingHover && say(pendingHover.line, pendingHover.hold, pendingHover.priority))
-      pendingHover = null;
+  const present = (speech: BeeSpeech) => {
+    bubbleText.textContent = speech.text;
+    bubble.dataset.lineId = speech.line.id;
+    bubble.dataset.trigger = speech.line.trigger;
+    bubble.classList.add("is-visible");
+    bubbleShown = true;
+    bubbleVisible = true;
+    measureBubble();
+    followBubble();
+    bubbleHideAt = speech.until;
+    mood = speech.line.mood;
+    restUntil = clock + beeReadTime(speech.text) + 1.4;
+    if (
+      speech.explicit &&
+      ["boop", "boop-repeat", "discover", "eat", "feed-repeat", "story"].includes(
+        speech.line.trigger,
+      )
+    )
+      announce(speech.text);
   };
+  const storyControls = () => {
+    const button = home?.querySelector<HTMLButtonElement>("[data-pet-story]");
+    if (button) {
+      button.textContent = storyIndex < 0 ? "Joke" : storyIndex === 2 ? "Finish" : "Next";
+      button.setAttribute(
+        "aria-label",
+        storyIndex < 0
+          ? "Tell a tiny bee story"
+          : storyIndex === 2
+            ? "Finish bee story"
+            : "Next bee story line",
+      );
+    }
+    const close = home?.querySelector<HTMLButtonElement>("[data-pet-close]");
+    if (close) {
+      if (storyIndex < 0 && document.activeElement === close)
+        button?.focus({ preventScroll: true });
+      close.hidden = storyIndex < 0;
+    }
+  };
+  const endStory = () => {
+    if (storyIndex < 0) return;
+    storyCycle = (storyCycle + 1) % 4;
+    storyIndex = -1;
+    storyControls();
+    hush();
+    dialogue.clear();
+    nextTeaser = (touchPrimary ? 13 : 7) + random() * (touchPrimary ? 9 : 6);
+  };
+  const react = (next: BeeMood) => {
+    mood = next;
+    reactionUntil = clock + 0.65;
+  };
+  // Cache dimensions and protected UI once per line; following needs no layout reads.
+  const measureBubble = () => {
+    bubbleGeometryDirty = false;
+    const viewport = window.visualViewport;
+    const left = (viewport?.offsetLeft ?? 0) + 8;
+    const top = (viewport?.offsetTop ?? 0) + 8;
+    const right = left + (viewport?.width ?? width) - 16;
+    const bottom = top + (viewport?.height ?? height) - 16;
+    bubbleBounds = { left, top, right, bottom };
+    bubble.style.maxWidth = `${Math.min(240, right - left)}px`;
+    bubbleW = bubble.offsetWidth;
+    bubbleH = bubble.offsetHeight;
+    bubbleObstacles = [];
+    const cardRects = new Map<Element, DOMRect>();
+    const inViewport = (r: DOMRect) =>
+      r.right > left && r.left < right && r.bottom > top && r.top < bottom;
+    for (const node of document.querySelectorAll(
+      ".question-band, .answer-copy, .model-heading, .answer-metrics, .answer-image, .results-toolbar, .table-actions, button, a, summary, select, dialog[open]",
+    )) {
+      const card = node.closest(".model-card");
+      if (card) {
+        let rect = cardRects.get(card);
+        if (!rect) {
+          rect = card.getBoundingClientRect();
+          cardRects.set(card, rect);
+        }
+        // Measuring skipped descendants defeats content-visibility: auto.
+        // The containing card's box is enough to reject offscreen obstacles.
+        if (!inViewport(rect)) continue;
+      }
+      const rect = node.getBoundingClientRect();
+      if (rect.width && rect.height && inViewport(rect)) bubbleObstacles.push(rect);
+    }
+    speechTarget = null;
+    if (!reduced) {
+      // Find the nearest readable pose once per line/layout change. The bubble
+      // stays attached to the actual bee while it settles there; no detached lane.
+      const xs = [
+        pos.x,
+        pos.x - bubbleW - 40,
+        pos.x + bubbleW + 40,
+        width / 2,
+        left + 24,
+        right - 24,
+      ];
+      const ys = [pos.y, pos.y + 80, pos.y + 160, pos.y + 240, height * 0.4, garden.y];
+      let best = Infinity;
+      for (const x of xs) {
+        for (const y of ys) {
+          const candidate = {
+            x: clamp(x, left + 24, right - 24),
+            y: clamp(y, top + bubbleH + 24, bottom - 24),
+          };
+          if (!bubblePosition(candidate.x, candidate.y)) continue;
+          const distance = Math.hypot(candidate.x - pos.x, candidate.y - pos.y);
+          if (distance < best) {
+            best = distance;
+            speechTarget = candidate;
+          }
+        }
+      }
+    }
+  };
+  const bubblePosition = (beeX: number, beeY: number) => {
+    const { left, top, right, bottom } = bubbleBounds;
+    // A little more headroom keeps multi-line phone replies above the Bzz
+    // disclosure without covering it or detaching speech from the character.
+    for (const gap of [24, 56, 88]) {
+      const y = clamp(beeY - bubbleH - gap, top, bottom - bubbleH);
+      for (const candidate of [beeX + 20, beeX - bubbleW - 20, beeX - bubbleW / 2]) {
+        const x = clamp(candidate, left, right - bubbleW);
+        if (
+          bubbleObstacles.every(
+            (r) =>
+              x + bubbleW + 6 <= r.left ||
+              x - 6 >= r.right ||
+              y + bubbleH + 6 <= r.top ||
+              y - 6 >= r.bottom,
+          )
+        )
+          return { x, y };
+      }
+    }
+    return null;
+  };
+  const followBubble = () => {
+    if (!bubbleVisible || bubbleGeometryDirty || clock < scrollQuietAt) return;
+    const position = bubblePosition(reduced ? staticBee.x : pos.x, reduced ? staticBee.y : pos.y);
+    const shown = Boolean(position);
+    if (shown !== bubbleShown) {
+      bubble.classList.toggle("is-visible", shown);
+      bubbleShown = shown;
+    }
+    if (!position) return;
+    const { x, y } = position;
+    if (Math.abs(x - bubbleX) > 0.5 || Math.abs(y - bubbleY) > 0.5) {
+      bubbleX = x;
+      bubbleY = y;
+      bubble.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+    }
+  };
+  const ask = (
+    trigger: BeeTrigger,
+    explicit = false,
+    name?: string,
+    count?: number,
+    key?: string,
+  ) => {
+    dialogue.request(
+      trigger,
+      { name, count, family: name ? beeFamily(name) : undefined },
+      clock,
+      explicit,
+      key,
+    );
+  };
+  const suspend = () => {
+    blocked =
+      Boolean(
+        document.querySelector(
+          "dialog[open], #mobile-navigation:popover-open, #recent-questions[open]",
+        ),
+      ) ||
+      Boolean(
+        document.activeElement?.matches(
+          "input, textarea, select, summary:not(.bee-home > summary)",
+        ),
+      );
+    if (blocked) {
+      endStory();
+      dialogue.clear();
+      hush();
+    }
+  };
+  const motionChange = () => {
+    reduced = document.documentElement.dataset.motion === "off";
+    fruits.length = 0;
+    sparkles.length = 0;
+    endStory();
+    dialogue.clear();
+    hush();
+  };
+  document.addEventListener("focusin", suspend);
+  document.addEventListener("focusout", suspend);
+  document.addEventListener("toggle", suspend, true);
+  const beforeToggle = (event: Event) => {
+    // Opening top-layer UI hides comedy before its first paint.
+    if ((event as ToggleEvent).newState === "open") {
+      endStory();
+      dialogue.clear();
+      hush();
+      blocked = true;
+    }
+  };
+  document.addEventListener("beforetoggle", beforeToggle, true);
+  const closeWithEscape = (event: KeyboardEvent) => {
+    if (event.key === "Escape" && storyIndex >= 0) {
+      endStory();
+      announce("Story closed.");
+    }
+  };
+  document.addEventListener("keydown", closeWithEscape);
+  window.addEventListener("model-table:motion-change", motionChange);
+  const hideOnViewportChange = () => {
+    // Layout can change after an app action (roster FLIP, prompt height, scroll).
+    // Hide during that movement, but retain the live line until its real expiry.
+    bubble.classList.remove("is-visible");
+    bubbleShown = false;
+    bubbleGeometryDirty = true;
+    dialogue.clear("hover");
+    scrollQuietAt = clock + 0.3;
+  };
+  window.addEventListener("scroll", hideOnViewportChange, { passive: true });
+  window.visualViewport?.addEventListener("resize", hideOnViewportChange);
+  window.visualViewport?.addEventListener("scroll", hideOnViewportChange);
 
   // ---- steering -----------------------------------------------------------
   const target = { x: pos.x, y: pos.y };
@@ -439,7 +474,6 @@ export function createBee(
       const dx = pos.x - fruit.x;
       const dy = pos.y - fruit.y;
       if (Math.hypot(dx, dy) < 90) {
-        orbitPhase += 0;
         target.x = fruit.x + Math.cos(orbitPhase) * 34;
         target.y = fruit.y + Math.sin(orbitPhase) * 30 - 6;
       } else {
@@ -448,9 +482,24 @@ export function createBee(
       }
       return;
     }
+    if (bubbleVisible && speechTarget) {
+      target.x = speechTarget.x;
+      target.y = speechTarget.y;
+      return;
+    }
     if (mode === "flower" && flowerRect) {
       target.x = flowerRect.left + flowerRect.width / 2;
-      target.y = flowerRect.top - 12;
+      target.y = flowerRect.top - 26;
+      return;
+    }
+    if (clock < restUntil) {
+      target.x = pos.x;
+      target.y = pos.y;
+      return;
+    }
+    if (!pointerActive && clock > 14) {
+      target.x = clamp(garden.x, 24, width - 24);
+      target.y = clamp(garden.y, 24, height - 24) + Math.sin(clock * 1.2) * 2;
       return;
     }
     // Cruise: a cursor anchor that lags, plus a Lissajous wander so the bee drifts alive.
@@ -491,35 +540,41 @@ export function createBee(
   };
 
   // ---- fruit --------------------------------------------------------------
-  const spawnFruit = (x: number, y: number) => {
+  const spawnFruit = (x: number, y: number, explicit = false) => {
     if (fruits.length >= 3) fruits.shift();
-    const kind = Math.floor(Math.random() * FRUIT_TINTS.length);
+    const kind = Math.floor(random() * FRUIT_TINTS.length);
     fruits.push({
       x: clamp(x, 20, width - 20),
       y: clamp(y - 8, 20, height - 60),
-      vx: (Math.random() - 0.5) * 60,
+      vx: (random() - 0.5) * 60,
       vy: -40,
-      rot: (Math.random() - 0.5) * 0.6,
-      vr: (Math.random() - 0.5) * 3,
+      rot: (random() - 0.5) * 0.6,
+      vr: (random() - 0.5) * 3,
       kind,
-      groundY: clamp(y + 130 + Math.random() * 60, 60, height - 22),
+      groundY: clamp(y + 130 + random() * 60, 60, height - 22),
       landed: false,
       squash: 0,
       age: 0,
-      life: 1 + Math.random() * 2,
+      life: 1 + random() * 2,
       scale: 0.2,
       collected: false,
       eaten: false,
+      explicit,
+      approached: false,
     });
     mode = "fruit";
     perched = false;
   };
 
-  const updateFruits = (dt: number) => {
+  const updateFruits = (dt: number, elapsed: number) => {
     for (let i = fruits.length - 1; i >= 0; i--) {
       const f = fruits[i];
-      f.age += dt;
+      f.age += elapsed;
       f.scale = Math.min(1, f.scale + dt * 5);
+      if (f.age >= f.life) {
+        fruits.splice(i, 1);
+        continue;
+      }
       f.vy += 1500 * dt;
       f.x += f.vx * dt;
       f.y += f.vy * dt;
@@ -537,11 +592,18 @@ export function createBee(
         f.vr *= 0.5;
         if (Math.abs(f.vy) < 50) f.vy = 0;
       }
+      if (!f.approached && Math.hypot(pos.x - f.x, pos.y - f.y) < 90) {
+        f.approached = true;
+        ask("approach");
+      }
       // The bee eats a fruit it reaches; otherwise it ripens away after 1-3 seconds.
       if (!f.eaten && !f.collected && f.age > 0.2 && Math.hypot(pos.x - f.x, pos.y - f.y) < 36) {
         f.eaten = true;
-        const line = pick(FRUIT_LINES);
-        say(line, readTime(line), 1);
+        meals = Math.min(9, meals + 1);
+        dialogue.clear("discover");
+        dialogue.clear("approach");
+        react("content");
+        ask(meals > 1 ? "feed-repeat" : "eat", f.explicit, undefined, meals);
       }
       if (f.eaten || f.age > f.life) {
         f.scale = Math.max(0, f.scale - dt * (f.eaten ? 6 : 2.6));
@@ -553,6 +615,7 @@ export function createBee(
         }
       }
     }
+    if (!fruits.length && mode === "fruit") mode = "cruise";
   };
 
   // ---- pixel-art drawing --------------------------------------------------
@@ -727,15 +790,38 @@ export function createBee(
   // ---- main loop ----------------------------------------------------------
   const update = (dt: number, time: number) => {
     if (disposed) return;
-    clock += dt;
+    // Physics uses the capped frame step; reading/expiry use elapsed time from
+    // the same clock so a slow frame or background tab cannot keep fruit or jokes alive.
+    const elapsed =
+      previousUpdateTime === undefined ? dt : Math.max(0, (time - previousUpdateTime) / 1000);
+    previousUpdateTime = time;
+    clock += elapsed;
     opacity += ((enabled ? 1 : 0) - opacity) * damp(6, dt);
     if (!enabled && opacity < 0.01) {
       if (bubbleVisible) hush();
       return;
     }
+    if (!enabled) return;
+    if (bubbleVisible && storyIndex < 0 && clock >= bubbleHideAt) hush();
+    if (bubbleVisible && bubbleGeometryDirty && !blocked && clock >= scrollQuietAt) {
+      measureHome();
+      measureBubble();
+    }
+    if (!blocked && storyIndex < 0) {
+      const speech = dialogue.tick(clock, clock >= scrollQuietAt);
+      if (speech) present(speech);
+    }
+    if (reduced) {
+      for (let i = fruits.length - 1; i >= 0; i--) {
+        fruits[i].age += elapsed;
+        if (fruits[i].age >= fruits[i].life) fruits.splice(i, 1);
+      }
+      home?.classList.toggle("has-snack", fruits.length > 0);
+      followBubble();
+      return;
+    }
     pointerSpeed *= 0.02 ** dt;
     boost += (clamp(pointerSpeed * 0.02, 0, 1) - boost) * damp(18, dt);
-    flushHover();
 
     // anchor lags the cursor
     const a = damp(4, dt);
@@ -747,12 +833,11 @@ export function createBee(
       flowerDwell += dt;
       mode = "flower";
       const px = flowerRect.left + flowerRect.width / 2;
-      const py = flowerRect.top - 12;
+      const py = flowerRect.top - 26;
       const near = Math.hypot(pos.x - px, pos.y - py) < 16 && Math.hypot(vel.x, vel.y) < 70;
       if (flowerDwell > 0.22 && near && !perched) {
         perched = true;
-        const line = pick(HOVER_LINES);
-        say(line, readTime(line), 1);
+        ask("flower");
       }
     } else if (mode === "flower") {
       mode = "cruise";
@@ -762,16 +847,16 @@ export function createBee(
 
     orbitPhase += 6 * dt;
     computeTarget(time);
-    const speedNow = Math.hypot(vel.x, vel.y);
     const maxSpeed = 560 + boost * 460;
     if (perched && flowerRect) {
       // settle onto the bloom with a gentle sip bob
       const px = flowerRect.left + flowerRect.width / 2;
-      const py = flowerRect.top - 10 + Math.sin(clock * 2.4) * 2;
+      const py = flowerRect.top - 26 + Math.sin(clock * 2.4) * 2;
       pos.x += (px - pos.x) * damp(10, dt);
       pos.y += (py - pos.y) * damp(10, dt);
-      vel.x *= 0.8;
-      vel.y *= 0.8;
+      const decay = 1 - damp(-Math.log(0.8) * 60, dt);
+      vel.x *= decay;
+      vel.y *= decay;
     } else {
       steer(dt, maxSpeed);
     }
@@ -789,78 +874,47 @@ export function createBee(
     } else {
       bank += (0 - bank) * damp(6, dt);
     }
-    const flapFreq = perched ? 7 : 40 + (speed / 560) * 30 + boost * 26;
+    const flapFreq = perched || clock < restUntil ? 7 : 40 + (speed / 560) * 30 + boost * 26;
     flapPhase += dt * flapFreq;
 
-    updateFruits(dt);
+    updateFruits(dt, elapsed);
 
     // a bounded trail of pink pollen dots when the bee zips around
     sparkleTimer -= dt;
     if (speed > 150 && sparkleTimer <= 0 && sparkles.length < 10) {
-      sparkleTimer = 0.16 + Math.random() * 0.06;
+      sparkleTimer = 0.16 + random() * 0.06;
       sparkles.push({
-        x: pos.x - vel.x * 0.02 + (Math.random() - 0.5) * 10,
-        y: pos.y - vel.y * 0.02 + (Math.random() - 0.5) * 10,
+        x: pos.x - vel.x * 0.02 + (random() - 0.5) * 10,
+        y: pos.y - vel.y * 0.02 + (random() - 0.5) * 10,
         age: 0,
-        life: 0.5 + Math.random() * 0.3,
-        size: 1 + Math.floor(Math.random() * 2),
+        life: 0.5 + random() * 0.3,
+        size: 1 + Math.floor(random() * 2),
       });
     }
     for (let i = sparkles.length - 1; i >= 0; i--) {
       const s = sparkles[i];
-      s.age += dt;
+      s.age += elapsed;
       s.y -= 16 * dt;
       if (s.age >= s.life) sparkles.splice(i, 1);
     }
 
-    // personality: story mode, then ambient teasers
-    if (storyIndex >= 0) {
-      storyTimer -= dt;
-      if (storyTimer <= 0) {
-        storyIndex++;
-        if (storyIndex >= STORY_LINES.length) {
-          storyIndex = -1;
-          hush();
-        } else {
-          bubbleText.textContent = STORY_LINES[storyIndex];
-          bubble.classList.add("is-visible");
-          bubbleVisible = true;
-          bubbleW = bubble.offsetWidth || 120;
-          storyTimer = readTime(STORY_LINES[storyIndex]);
-          bubbleHideAt = clock + 999;
-        }
-      }
-    } else {
-      nextTeaser -= dt;
-      if (bubbleVisible && clock > bubbleHideAt) hush();
-      if (nextTeaser <= 0 && opacity > 0.6 && !document.hidden) {
-        nextTeaser = (touchPrimary ? 13 : 7) + Math.random() * (touchPrimary ? 9 : 6);
-        if (!perched && mode === "cruise") {
-          const line = pick(IDLE_LINES);
-          say(line, readTime(line), 0);
-        }
-      }
+    // One waiting aside at most; otherwise give the reading task room.
+    if (busy && clock >= waitingAt) {
+      waitingAt = Infinity;
+      ask("waiting");
+    }
+    nextTeaser -= elapsed;
+    if (nextTeaser <= 0 && !busy && storyIndex < 0 && !blocked && !perched && mode === "cruise") {
+      nextTeaser = (touchPrimary ? 13 : 7) + random() * (touchPrimary ? 9 : 6);
+      ask(arrived ? "idle" : "arrival");
+      arrived = true;
     }
 
-    // bubble follows the bee
-    if (bubbleVisible) {
-      if (bubbleMeasure) {
-        bubbleW = bubble.offsetWidth || 120;
-        bubbleMeasure = false;
-      }
-      const bx = clamp(pos.x + 20, 8, width - bubbleW - 8);
-      const by = clamp(pos.y - 42, 8, height - 48);
-      if (Math.abs(bx - bubbleX) > 0.5 || Math.abs(by - bubbleY) > 0.5) {
-        bubbleX = bx;
-        bubbleY = by;
-        bubble.style.transform = `translate3d(${bx}px, ${by}px, 0)`;
-      }
-    }
-    void speedNow;
+    followBubble();
   };
 
   const draw = (ctx: CanvasRenderingContext2D) => {
-    if (disposed || opacity < 0.01) return;
+    if (disposed || !enabled || reduced || opacity < 0.01) return;
     if (sparkles.length) {
       ctx.save();
       ctx.fillStyle = "#f9a8d4";
@@ -877,20 +931,67 @@ export function createBee(
     else if (vel.x < -24) facing = -1;
     const sn = clamp(speed / 560, 0, 1);
     const lean = clamp(bank, -0.3, 0.3);
-    const flap = Math.sin(flapPhase) * (perched ? 0.25 : 0.9);
+    // Five pixel-art poses avoid sub-frame wing shimmer while preserving the cadence.
+    const flap = (Math.round(Math.sin(flapPhase) * 2) / 2) * (perched ? 0.25 : 0.9);
+    const reaction = Math.max(0, (reactionUntil - clock) / 0.65);
+    const squash = mood === "startled" ? Math.sin(reaction * Math.PI) * 0.14 : 0;
+    const hop = mood === "excited" ? Math.sin(reaction * Math.PI) * 5 : 0;
     const u = 1.7;
     ctx.save();
     ctx.globalAlpha = opacity;
     ctx.imageSmoothingEnabled = false;
-    ctx.translate(Math.round(pos.x), Math.round(pos.y));
+    ctx.translate(Math.round(pos.x), Math.round(pos.y - hop));
     ctx.rotate(lean);
-    ctx.scale(facing * u * (1 + sn * 0.12), u * (1 - sn * 0.06));
+    ctx.scale(facing * u * (1 + sn * 0.12 + squash), u * (1 - sn * 0.06 - squash));
     drawBee(ctx, flap);
     ctx.restore();
   };
 
+  const action = (kind: BeeAction) => {
+    if (!enabled || disposed || blocked) return;
+    measureHome();
+    if (kind === "close") {
+      endStory();
+      announce("Story closed.");
+      return;
+    }
+    if (kind === "story") {
+      if (storyIndex < 0 && busy) {
+        announce("The models are working. Tiny story later.");
+        return;
+      }
+      dialogue.clear();
+      storyIndex++;
+      if (storyIndex >= 3) {
+        endStory();
+        announce("Story finished.");
+        return;
+      }
+      const stories = BEE_LINES.filter((l) => l.trigger === "story");
+      const line = stories[(storyCycle % (stories.length / 3)) * 3 + storyIndex];
+      present({ line, text: line.text, at: clock, until: Infinity, explicit: true });
+      storyControls();
+      react("curious");
+      return;
+    }
+    endStory();
+    if (kind === "boop") {
+      boops = Math.min(9, boops + 1);
+      react("startled");
+      ask(boops > 1 ? "boop-repeat" : "boop", true, undefined, boops);
+      announce("Bee booped.");
+    } else {
+      spawnFruit(garden.x + 26, garden.y - 12, true);
+      restUntil = 0;
+      react("curious");
+      ask("discover", true);
+      announce("Snack placed in the garden.");
+      if (reduced) home?.classList.add("has-snack");
+    }
+  };
   return {
     update,
+    action,
     draw,
     pointer(x, y, speed) {
       pointerPos.x = x;
@@ -901,32 +1002,18 @@ export function createBee(
     pointerLeave() {
       pointerActive = false;
     },
-    click(x, y) {
-      if (!enabled || opacity < 0.4) return false;
-      // While the story plays, any tap continues it — no precision-tapping a moving bee.
-      if (storyIndex >= 0) {
-        storyTimer = 0;
+    click(x, y, feed) {
+      if (!enabled || opacity < 0.4 || reduced || blocked) return false;
+      if (Math.hypot(x - pos.x, y - pos.y) >= 34) {
+        if (!feed) return false;
+        endStory();
+        spawnFruit(x, y, true);
+        restUntil = 0;
+        react("curious");
+        ask("discover", true);
         return true;
       }
-      // clicking the bee itself starts its story
-      if (Math.hypot(x - pos.x, y - pos.y) < 34) {
-        storyIndex = 0;
-        pendingHover = null;
-        storyTimer = readTime(STORY_LINES[0]);
-        bubbleText.textContent = STORY_LINES[0];
-        bubble.classList.add("is-visible");
-        bubbleVisible = true;
-        bubbleW = bubble.offsetWidth || 120;
-        bubbleHideAt = clock + 999;
-        onBurst(pos.x, pos.y, 14, colors.accent);
-        return true;
-      }
-      spawnFruit(x, y);
-      // On touch, feeding the bee is the interaction; the eating line is the feedback.
-      if (storyIndex < 0 && !touchPrimary) {
-        const line = pick(CLICK_LINES);
-        say(line, readTime(line), 2);
-      }
+      action("boop");
       return true;
     },
     flower(rect) {
@@ -934,65 +1021,101 @@ export function createBee(
       flowerDwell = 0;
       if (!rect) perched = false;
     },
-    scroll(speed, direction) {
-      if (touchPrimary || !enabled || opacity < 0.5 || storyIndex >= 0) return;
-      if (speed > 26) {
-        const line = pick(FAST_SCROLL_LINES);
-        say(line, readTime(line), 0);
-      } else if (speed > 6 && direction !== 0 && Math.random() < 0.3) {
-        const line = pick(SLOW_SCROLL_LINES);
-        say(line, readTime(line), 0);
-      }
+    scroll() {
+      dialogue.clear("hover");
+      hoverKey = "";
     },
     comment(event, name) {
-      if (!enabled || opacity < 0.4 || storyIndex >= 0) return;
-      const meme = name ? modelMeme(name) : null;
-      const line =
-        meme !== null &&
-        (event === "response" || event === "winner" || event === "error" || event === "cheap") &&
-        Math.random() < 0.6
-          ? meme
-          : pick(EVENT_LINES[event]).replace("{name}", name ?? "A model");
-      const climax = event === "winner";
-      if (climax) lastLineAt = -10;
-      say(line, readTime(line) + (climax ? 0.4 : 0), climax ? 3 : 2);
-      if (climax) onBurst(pos.x, pos.y, 12, colors.accent);
-    },
-    hover(zone, name, tag) {
-      // Callers gate by pointer type; touch taps arrive here at the calmer touch cadence.
-      if (!enabled || opacity < 0.4 || storyIndex >= 0) return;
-      if (!zone) {
-        pendingHover = null;
+      if (!enabled || disposed) return;
+      if (event === "complete") {
+        busy = false;
+        dialogue.clear("response");
+        dialogue.clear("waiting");
         return;
       }
-      const fill = (text: string) => text.replaceAll("{name}", name ?? "This one");
-      let line: string;
-      // Model jokes outrank area/fruit lines so arriving on a card always lands them.
-      let priority = 1;
-      if (zone === "model") {
-        priority = 2;
-        const meme = modelMeme(name ?? "");
-        if (tag === "fastest")
-          line = meme && Math.random() < 0.5 ? meme : fill(pick(EVENT_LINES.winner));
-        else if (tag === "cheapest")
-          line = meme && Math.random() < 0.5 ? meme : fill(pick(CHEAP_LINES));
-        else line = meme ?? fill(pick(MODEL_HOVER_LINES));
-      } else {
-        line = pick(AREA_LINES[zone]);
+      if (event === "run" || event === "error" || event === "cancel" || event === "compare") {
+        endStory();
+        dialogue.clearPending();
       }
-      pendingHover = { line, hold: readTime(line), priority };
-      flushHover();
+      if (event === "run") {
+        busy = true;
+        waitingAt = clock + 10;
+      }
+      if (event === "cancel") busy = false;
+      const trigger = event === "winner" ? "fastest" : event;
+      const explicit = [
+        "select",
+        "deselect",
+        "preset-core",
+        "preset-free",
+        "preset-all",
+        "surprise",
+        "starter",
+        "copy",
+        "export",
+        "day",
+        "night",
+      ].includes(event);
+      if (explicit) {
+        endStory();
+        dialogue.clear("hover");
+        dialogue.clear("idle");
+        dialogue.clear("arrival");
+      }
+      react(
+        event === "error"
+          ? "startled"
+          : event === "run" || event === "winner"
+            ? "excited"
+            : "curious",
+      );
+      ask(trigger, explicit, name, undefined, explicit ? "action" : undefined);
+    },
+    hover(zone, name, tag) {
+      if (!enabled || disposed) return;
+      const next = zone === "model" ? `${name ?? ""}:${tag ?? ""}` : "";
+      if (next === hoverKey) return;
+      hoverKey = next;
+      dialogue.clear("hover");
+      if (!next || storyIndex >= 0 || blocked) return;
+      ask(
+        tag === "fastest" ? "fastest" : tag === "cheapest" ? "cheap" : "model",
+        false,
+        name,
+        undefined,
+        "hover",
+      );
     },
     setEnabled(on) {
       enabled = on;
+      if (home) {
+        home.hidden = !on;
+        home.dataset.enabled = String(on);
+      }
       if (!on) {
         hush();
-        pendingHover = null;
+        dialogue.reset();
+        announce("");
+        boops = meals = 0;
+        storyCycle = 0;
+        busy = false;
+        arrived = false;
+        home?.classList.remove("has-snack");
         storyIndex = -1;
+        storyControls();
+        home?.removeAttribute("open");
         fruits.length = 0;
         sparkles.length = 0;
         mode = "cruise";
         perched = false;
+        flowerRect = null;
+        flowerDwell = 0;
+        pointerActive = false;
+        pointerSpeed = 0;
+        hoverKey = "";
+        restUntil = 0;
+        reactionUntil = 0;
+        boost = 0;
       } else if (opacity < 0.05) {
         pos.x = width * 0.5;
         pos.y = -40;
@@ -1007,15 +1130,50 @@ export function createBee(
     resize(w, h) {
       width = w;
       height = h;
+      measureHome();
+      hideOnViewportChange();
     },
     dispose() {
       disposed = true;
+      bubbleObstacles = [];
       bubble.remove();
+      observer?.disconnect();
+      document.removeEventListener("focusin", suspend);
+      document.removeEventListener("focusout", suspend);
+      document.removeEventListener("toggle", suspend, true);
+      document.removeEventListener("beforetoggle", beforeToggle, true);
+      document.removeEventListener("keydown", closeWithEscape);
+      window.removeEventListener("model-table:motion-change", motionChange);
+      window.removeEventListener("scroll", hideOnViewportChange);
+      window.visualViewport?.removeEventListener("resize", hideOnViewportChange);
+      window.visualViewport?.removeEventListener("scroll", hideOnViewportChange);
+      dialogue.reset();
+      announce("");
+      storyIndex = -1;
+      storyControls();
+      home?.classList.remove("has-snack");
       fruits.length = 0;
       sparkles.length = 0;
     },
     get active() {
-      return opacity > 0.01 || fruits.length > 0 || sparkles.length > 0;
+      return enabled && !reduced && (opacity > 0.01 || fruits.length > 0 || sparkles.length > 0);
+    },
+    get diagnostics() {
+      return {
+        boops,
+        meals,
+        fruits: fruits.length,
+        story: storyIndex,
+        queued: dialogue.diagnostics.queued,
+        recent: dialogue.diagnostics.recent,
+        mood,
+        pointerActive,
+        flower: Boolean(flowerRect),
+        hoverKey,
+        restUntil,
+        perched,
+        speed: Math.hypot(vel.x, vel.y),
+      };
     },
   };
 }

@@ -51,6 +51,8 @@ declare global {
     gsap?: typeof import("gsap").gsap;
     __unhandledRejections?: string[];
     __copiedMarkdown?: string;
+    __motionProbe?: Promise<number[]>;
+    __acceptCopy?: () => void;
   }
 }
 
@@ -82,6 +84,33 @@ export async function fulfillImage(route: Route) {
     contentType: "image/png",
     body: IMAGE,
   });
+}
+
+export async function observeMotion(page: Page, selector: string) {
+  await page.evaluate((target) => {
+    window.__motionProbe = new Promise<number[]>((resolve) => {
+      const moved = new Set<number>();
+      const start = performance.now();
+      const sample = () => {
+        document.querySelectorAll<HTMLElement>(target).forEach((node, index) => {
+          const style = getComputedStyle(node);
+          const matrix = new DOMMatrixReadOnly(style.transform);
+          if (
+            style.display !== "none" &&
+            Number(style.opacity) > 0.05 &&
+            [matrix.a - 1, matrix.b, matrix.c, matrix.d - 1, matrix.e, matrix.f].some(
+              (value) => Math.abs(value) > 0.02,
+            )
+          )
+            moved.add(index);
+        });
+        if (performance.now() - start < 1400) requestAnimationFrame(sample);
+        else resolve([...moved].sort((a, b) => a - b));
+      };
+      requestAnimationFrame(sample);
+    });
+  }, selector);
+  return () => page.evaluate(() => window.__motionProbe);
 }
 
 export async function mockApp(

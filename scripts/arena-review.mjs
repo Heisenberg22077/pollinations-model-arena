@@ -94,10 +94,11 @@ export async function reviewFrontend() {
       await page.waitForTimeout(300);
       await page.screenshot({ path: `${output}/desktop-${theme}.png`, fullPage: true });
       report.captures.push(`desktop-${theme}.png`);
-      await copyFile(
-        `${output}/desktop-${theme}.png`,
-        theme === "day" ? "docs/screenshot.png" : "docs/screenshot-night.png",
-      );
+      if (process.env.UPDATE_DOC_SCREENSHOTS === "1")
+        await copyFile(
+          `${output}/desktop-${theme}.png`,
+          theme === "day" ? "docs/screenshot.png" : "docs/screenshot-night.png",
+        );
       await page.setViewportSize({ width: 390, height: 844 });
       await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
       await page.waitForTimeout(300);
@@ -106,7 +107,7 @@ export async function reviewFrontend() {
       await page.waitForTimeout(350);
       await page.screenshot({ path: `${output}/phone-answers-${theme}.png` });
       report.captures.push(`phone-composer-${theme}.png`, `phone-answers-${theme}.png`);
-      if (theme === "day") {
+      if (theme === "day" && process.env.UPDATE_DOC_SCREENSHOTS === "1") {
         await copyFile(
           `${output}/phone-composer-${theme}.png`,
           "docs/screenshot-mobile-composer.png",

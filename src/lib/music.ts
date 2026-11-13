@@ -1,10 +1,13 @@
 // Background music: the user's own recording, trimmed to a 90s loop and self-hosted in
 // three web codecs. The player picks the best one the browser truly supports — Opus (WebM)
 // where it reports full support, AAC (M4A) on Apple/legacy, MP3 as the universal floor —
-// and falls back to the next codec if a source fails to decode. Playback unlocks on the
-// first real user gesture (autoplay policy); one master mute in sound.ts fades it out.
+// and falls back to the next codec if a source fails to decode. Music is on by default:
+// once the page has loaded it tries to start on its own (allowed only where the browser's
+// autoplay policy permits it); otherwise it starts on the first real user gesture.
+// One master mute in sound.ts fades it out.
 
 const TARGET = 0.6;
+const FADE_OUT = 0.12;
 
 // ---- codec ladder ---------------------------------------------------------
 function sourceOrder(): string[] {
@@ -34,21 +37,23 @@ let enabled = false;
 let gestured = false;
 let armed = false;
 let playing = false;
+let pageReady = false;
+
+// After a no-gesture autoplay the listeners stay armed so the first gesture can move
+// playback onto the gain graph (an AudioContext made before a gesture starts suspended).
+function onPlaying() {
+  playing = true;
+  if (graphReady || graphFailed) disarm();
+}
 
 function handleError() {
   if (el && sourceIndex < sources.length - 1) {
     sourceIndex += 1;
     el.src = sources[sourceIndex];
-    if (enabled && gestured) {
+    if (enabled && (gestured || pageReady)) {
       el.preload = "auto";
       const attempt = el.play();
-      if (attempt)
-        attempt
-          .then(() => {
-            playing = true;
-            disarm();
-          })
-          .catch(() => {});
+      if (attempt) attempt.then(onPlaying).catch(() => {});
     }
     return;
   }
@@ -104,13 +109,23 @@ function ensureGraph(): boolean {
   }
 }
 
+// Already audible through the bare element: reroute into the graph at the same level.
+function adoptGraph() {
+  if (graphReady || graphFailed || !el) return;
+  if (!ensureGraph() || !ctx || !master) return;
+  el.volume = 1;
+  master.gain.value = TARGET;
+  void ctx.resume();
+}
+
 function start() {
   if (playing) return;
   const element = ensureElement();
-  const hasGraph = ensureGraph();
+  const hasGraph = gestured && ensureGraph();
   element.preload = "auto";
   if (hasGraph && ctx && master) {
     void ctx.resume();
+    element.volume = 1;
     master.gain.cancelScheduledValues(ctx.currentTime);
     master.gain.setTargetAtTime(TARGET, ctx.currentTime, 0.4);
   } else {
@@ -118,18 +133,10 @@ function start() {
   }
   const attempt = element.play();
   if (attempt)
-    attempt
-      .then(() => {
-        playing = true;
-        disarm();
-      })
-      .catch(() => {
-        playing = false;
-      });
-  else {
-    playing = true;
-    disarm();
-  }
+    attempt.then(onPlaying).catch(() => {
+      playing = false;
+    });
+  else onPlaying();
 }
 
 function stop() {
@@ -138,19 +145,23 @@ function stop() {
   const element = el;
   if (graphReady && ctx && master) {
     master.gain.cancelScheduledValues(ctx.currentTime);
-    master.gain.setTargetAtTime(0, ctx.currentTime, 0.18);
+    master.gain.setTargetAtTime(0, ctx.currentTime, FADE_OUT);
   } else {
     element.volume = 0;
   }
-  window.setTimeout(() => {
-    if (enabled) return;
-    element.pause();
-    if (ctx && ctx.state === "running") void ctx.suspend();
-  }, 260);
+  // setTargetAtTime is exponential: ~5 time constants is effectively silent.
+  window.setTimeout(
+    () => {
+      if (enabled) return;
+      element.pause();
+      if (ctx && ctx.state === "running") void ctx.suspend();
+    },
+    FADE_OUT * 5000 + 50,
+  );
 }
 
 function apply() {
-  if (enabled && gestured) start();
+  if (enabled && (gestured || pageReady)) start();
   else stop();
 }
 
@@ -171,12 +182,29 @@ function disarm() {
 
 function unlock() {
   gestured = true;
+  if (playing) adoptGraph();
   apply();
-  if (playing || !enabled) disarm();
+  if ((playing && (graphReady || graphFailed)) || !enabled) disarm();
+}
+
+// The no-gesture attempt waits for the load event and an idle slot so the ~1.2 MB
+// track never competes with the hero art and fonts for bandwidth.
+function afterPageLoad(run: () => void) {
+  const idle = () => {
+    if (typeof window.requestIdleCallback === "function")
+      window.requestIdleCallback(run, { timeout: 1500 });
+    else window.setTimeout(run, 200);
+  };
+  if (document.readyState === "complete") idle();
+  else window.addEventListener("load", idle, { once: true });
 }
 
 export function armMusicGesture() {
   if (armed) return;
   armed = true;
   for (const event of GESTURE_EVENTS) window.addEventListener(event, unlock, { passive: true });
+  afterPageLoad(() => {
+    pageReady = true;
+    if (enabled && !playing) apply();
+  });
 }

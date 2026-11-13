@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { CORS, delay, fulfillChat, IDS, mockApp } from "./fixtures";
+import { CORS, delay, fulfillChat, IDS, mockApp, observeMotion } from "./fixtures";
 
 const diagnostics = (page: import("@playwright/test").Page) =>
   page.evaluate(async () => {
@@ -11,6 +11,188 @@ const diagnostics = (page: import("@playwright/test").Page) =>
     const runtime = await import(url);
     return runtime.motionDiagnostics();
   });
+
+test("pixel progress follows actual settlements and rests when paused", async ({ page }) => {
+  await mockApp(page, {
+    chat: async (route, request) => {
+      await delay(900);
+      await fulfillChat(route, request);
+    },
+  });
+  await page.getByRole("button", { name: "Run the table", exact: true }).click();
+  const trail = page.getByRole("list", { name: "Model progress", exact: true });
+  await expect(trail.locator("li")).toHaveCount(6);
+  await expect(trail.locator('li[data-status="pending"]')).not.toHaveCount(0);
+  await expect(trail.locator('li[data-status="done"]')).toHaveCount(6);
+  await page.getByRole("button", { name: "Pause animations", exact: true }).click();
+  const moving = await trail.evaluate(
+    (el) =>
+      window.gsap?.getTweensOf([...el.querySelectorAll("span,i")]).some((t) => t.isActive()) ??
+      false,
+  );
+  expect(moving).toBe(false);
+  await expect(trail.locator('li[data-status="done"]')).toHaveCount(6);
+});
+
+test("lineup pixels respond directly after adding, removing and readding models", async ({
+  page,
+}) => {
+  const state = await mockApp(page);
+  await expect(page.locator("html")).toHaveAttribute("data-motion-engine", "gsap");
+  const signal = page.locator(".model-signal");
+  for (const preset of ["All models", "Core 6", "All models"]) {
+    await page.getByRole("button", { name: preset, exact: true }).click();
+    const count = preset === "Core 6" ? 6 : 13;
+    await expect(signal.locator("i")).toHaveCount(count);
+    await page.waitForTimeout(1000);
+    await page.mouse.move(1, 1);
+    const observed = await observeMotion(page, ".model-signal i");
+    await signal.hover();
+    expect(await observed()).toHaveLength(count);
+  }
+  expect(state.pageErrors).toEqual([]);
+});
+
+test("keyboard preset changes ripple the live lineup without hover", async ({ page }) => {
+  await mockApp(page);
+  await expect(page.locator("html")).toHaveAttribute("data-motion-engine", "gsap");
+  const all = page.getByRole("button", { name: "All models", exact: true });
+  await all.focus();
+  const observed = await observeMotion(page, ".model-signal i");
+  await all.press("Enter");
+  await expect(page.locator(".model-signal i")).toHaveCount(13);
+  expect(await observed()).toHaveLength(13);
+});
+
+test("preset additions stamp the newly selected model checks", async ({ page }) => {
+  await mockApp(page);
+  await expect(page.locator("html")).toHaveAttribute("data-motion-engine", "gsap");
+  const observed = await observeMotion(page, ".extra-models .selection-check");
+  await page.getByRole("button", { name: "All models", exact: true }).click();
+  expect(await observed()).toEqual([0, 1, 2, 3, 4, 5, 6]);
+});
+
+test("starter questions arrive with feedback and remain immediately editable", async ({ page }) => {
+  await mockApp(page);
+  await expect(page.locator("html")).toHaveAttribute("data-motion-engine", "gsap");
+  const chip = page.locator(".composer-chip").nth(1);
+  await expect(chip).toBeVisible();
+  await chip.focus();
+  await expect(chip).toBeFocused();
+  const observed = await observeMotion(page, ".question-input");
+  await chip.press("Enter");
+  await expect(page.locator("#prompt")).toHaveValue((await chip.getAttribute("aria-label")) ?? "");
+  expect(await observed()).toEqual([0]);
+  const sweep = await observeMotion(page, ".question-transfer i");
+  await page.locator(".composer-chip").nth(2).click();
+  expect(await sweep()).toHaveLength(12);
+  await page.locator("#prompt").fill("My own question, without a delayed overwrite");
+  await expect(page.locator("#prompt")).toHaveValue("My own question, without a delayed overwrite");
+});
+
+test("restored questions get the same arrival feedback and keep editor focus", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "model-table:recent:v1",
+      JSON.stringify([
+        {
+          id: "saved-question",
+          timestamp: 1,
+          prompt: "Which invention would surprise a bee?",
+          models: [{ id: "openai/gpt-5.4-nano", status: "done", latencyMs: 120, cost: 0.001 }],
+        },
+      ]),
+    );
+  });
+  await mockApp(page);
+  await expect(page.locator("html")).toHaveAttribute("data-motion-engine", "gsap");
+  await page.locator(".recent-questions summary").click();
+  const observed = await observeMotion(page, ".question-input");
+  await page
+    .getByRole("button", {
+      name: "Restore recent question: Which invention would surprise a bee?",
+      exact: true,
+    })
+    .click();
+  await expect(page.locator("#prompt")).toHaveValue("Which invention would surprise a bee?");
+  await expect(page.locator("#prompt")).toBeFocused();
+  expect(await observed()).toEqual([0]);
+});
+
+test("copy success animates only after the clipboard accepts the answer", async ({ page }) => {
+  await mockApp(page);
+  await page.getByRole("button", { name: "Run the table", exact: true }).click();
+  const card = page.locator(`article[data-model-id="${IDS[0]}"]`);
+  await expect(card).toHaveAttribute("data-status", "done");
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: () =>
+          new Promise<void>((resolve) => {
+            window.__acceptCopy = resolve;
+          }),
+      },
+    });
+  });
+  const copy = card.getByRole("button", { name: "Copy GPT-5.4 Nano answer", exact: true });
+  const pending = await observeMotion(page, `article[data-model-id="${IDS[0]}"] .action-icon`);
+  await copy.click();
+  expect(await pending()).toEqual([]);
+  const accepted = await observeMotion(page, `article[data-model-id="${IDS[0]}"] .action-icon`);
+  await page.evaluate(() => window.__acceptCopy?.());
+  await expect(copy).toHaveAttribute("title", "Copied");
+  expect(await accepted()).toEqual([0]);
+});
+
+test("bulk copy waits for clipboard success before animating its check", async ({ page }) => {
+  await mockApp(page);
+  await page.getByRole("button", { name: "Run the table", exact: true }).click();
+  await expect(page.locator('article[data-status="done"]')).toHaveCount(6);
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: () =>
+          new Promise<void>((resolve) => {
+            window.__acceptCopy = resolve;
+          }),
+      },
+    });
+  });
+  const copy = page.getByRole("button", { name: "Copy as Markdown", exact: true });
+  const selector = '.results-controls [aria-label="Copy as Markdown"] .action-icon';
+  const pending = await observeMotion(page, selector);
+  await copy.click();
+  expect(await pending()).toEqual([]);
+  const accepted = await observeMotion(page, selector);
+  await page.evaluate(() => window.__acceptCopy?.());
+  await expect(copy).toContainText("Copied");
+  expect(await accepted()).toEqual([0]);
+});
+
+test("rapid lineup and prompt changes rest cleanly when motion is paused", async ({ page }) => {
+  const state = await mockApp(page);
+  await expect(page.locator("html")).toHaveAttribute("data-motion-engine", "gsap");
+  for (const preset of ["All models", "Core 6", "All models"]) {
+    await page.getByRole("button", { name: preset, exact: true }).dispatchEvent("click");
+    await page.locator(".composer-chip").nth(2).dispatchEvent("click");
+  }
+  await page.getByRole("button", { name: "Pause animations", exact: true }).click();
+  const observed = await observeMotion(
+    page,
+    ".model-signal i, .selection-check, .question-input, .question-transfer i",
+  );
+  await page.getByRole("button", { name: "Core 6", exact: true }).click();
+  await page.locator(".composer-chip").first().click();
+  expect(await observed()).toEqual([]);
+  await expect(page.locator(".model-signal i")).toHaveCount(6);
+  await page.getByRole("button", { name: "Resume animations", exact: true }).click();
+  const resumed = await observeMotion(page, ".model-signal i");
+  await page.getByRole("button", { name: "All models", exact: true }).click();
+  expect(await resumed()).toHaveLength(13);
+  expect(state.pageErrors).toEqual([]);
+});
 
 test("keeps one application clock through pause and media changes without leaking scene subscriptions", async ({
   page,

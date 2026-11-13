@@ -84,6 +84,118 @@ test("opens images directly by keyboard and restores answer height after interru
   expect(await page.evaluate(() => window.__unhandledRejections)).toEqual([]);
 });
 
+test("closing a drawer stops its child entrances before the exit finishes", async ({ page }) => {
+  await mockApp(page);
+  await expect(page.locator("html")).toHaveAttribute("data-motion-engine", "gsap");
+  const toggle = page.locator(".more-models-button");
+  await toggle.dispatchEvent("click");
+  await page.waitForTimeout(80);
+  await toggle.dispatchEvent("click");
+  await expect(page.locator("#extra-models")).toHaveAttribute("inert", "");
+  const frames = await page.locator("#extra-models .model-toggle").evaluateAll(async (nodes) => {
+    const styles = new Set<string>();
+    await new Promise<void>((resolve) => {
+      const start = performance.now();
+      const sample = () => {
+        styles.add(
+          nodes
+            .map((node) => {
+              const style = getComputedStyle(node);
+              return `${style.transform}/${style.opacity}`;
+            })
+            .join("|"),
+        );
+        if (performance.now() - start < 220) requestAnimationFrame(sample);
+        else resolve();
+      };
+      requestAnimationFrame(sample);
+    });
+    return styles.size;
+  });
+  expect(frames).toBe(1);
+  await expect(page.locator("#extra-models")).not.toBeVisible();
+  await toggle.click();
+  await expect(page.locator("#extra-models")).toBeVisible();
+  await expect
+    .poll(() =>
+      page
+        .locator("#extra-models .model-toggle")
+        .last()
+        .evaluate((node) => Number(getComputedStyle(node).opacity)),
+    )
+    .toBe(1);
+});
+
+test("rapid label re-entry has one decode writer rather than competing text updates", async ({
+  page,
+}) => {
+  await mockApp(page);
+  await expect(page.locator("html")).toHaveAttribute("data-motion-engine", "gsap");
+  await expect(page.locator(".surprise-button")).toBeVisible();
+  const updates = await page.locator(".surprise-button").evaluate(async (button) => {
+    const label = button.querySelector(".scramble-label");
+    if (!label) throw new Error("Missing scramble label");
+    let maxWrites = 0;
+    const observer = new MutationObserver((records) => {
+      maxWrites = Math.max(maxWrites, records.filter((record) => record.target === label).length);
+    });
+    observer.observe(label, { childList: true });
+    for (let index = 0; index < 20; index++) {
+      button.dispatchEvent(
+        new PointerEvent("pointerover", {
+          bubbles: true,
+          pointerType: "mouse",
+          relatedTarget: document.body,
+        }),
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    observer.disconnect();
+    return maxWrites;
+  });
+  expect(updates).toBeGreaterThan(0);
+  expect(updates).toBeLessThanOrEqual(2);
+  await expect(page.locator(".surprise-button .scramble-label")).toHaveText("Surprise me");
+});
+
+test("replacing a hovered card stops writing to its detached tilt plane", async ({ page }) => {
+  await mockApp(page);
+  await expect(page.locator("html")).toHaveAttribute("data-motion-engine", "gsap");
+  const retired = await page
+    .locator(".ghost-card")
+    .first()
+    .evaluateHandle((card) => {
+      const rect = card.getBoundingClientRect();
+      card.dispatchEvent(
+        new PointerEvent("pointermove", {
+          bubbles: true,
+          pointerType: "mouse",
+          clientX: rect.left + 12,
+          clientY: rect.top + 12,
+        }),
+      );
+      return { card, plane: card.querySelector<HTMLElement>(".card-tilt") };
+    });
+  await page.getByRole("button", { name: "Run the table", exact: true }).dispatchEvent("click");
+  await expect.poll(() => retired.evaluate(({ card }) => card.isConnected)).toBe(false);
+  const writes = await retired.evaluate(async ({ plane }) => {
+    if (!plane) throw new Error("Missing tilt plane");
+    const transforms = new Set<string>();
+    await new Promise<void>((resolve) => {
+      const start = performance.now();
+      const sample = () => {
+        transforms.add(plane.style.transform);
+        if (performance.now() - start < 220) requestAnimationFrame(sample);
+        else resolve();
+      };
+      requestAnimationFrame(sample);
+    });
+    return transforms.size;
+  });
+  expect(writes).toBe(1);
+  await retired.dispose();
+});
+
 test("animates drawer flow and settles repeated clicks when motion stops", async ({ page }) => {
   const state = await mockApp(page);
   await page.evaluate(() => document.fonts.ready);

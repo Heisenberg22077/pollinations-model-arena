@@ -161,6 +161,7 @@ function ModelCardView({
   const imageDialogRef = useRef<HTMLDialogElement>(null);
   const answerRef = useRef<HTMLParagraphElement>(null);
   const cardRef = useRef<HTMLElement>(null);
+  const copyIconRef = useRef<HTMLSpanElement>(null);
   const status = run?.status ?? "idle";
   const reasoning = run?.usage?.completion_tokens_details?.reasoning_tokens ?? 0;
   const answerId = `answer-${model.short}-${index}`;
@@ -189,12 +190,23 @@ function ModelCardView({
   useEffect(() => {
     if (!run?.text) return;
     const answer = answerRef.current;
-    if (!answer) return;
-    const measure = () => setOverflows(answer.scrollHeight > answer.clientHeight + 1);
-    measure();
+    const card = cardRef.current;
+    if (!answer || !card) return;
+    let visible = false;
+    const measure = () => {
+      if (visible) setOverflows(answer.scrollHeight > answer.clientHeight + 1);
+    };
     const observer = new ResizeObserver(measure);
     observer.observe(answer);
-    return () => observer.disconnect();
+    const visibility = new IntersectionObserver(([entry]) => {
+      visible = entry.isIntersecting;
+      measure();
+    });
+    visibility.observe(card);
+    return () => {
+      observer.disconnect();
+      visibility.disconnect();
+    };
   }, [run?.text]);
 
   const copyText = async () => {
@@ -202,6 +214,16 @@ function ModelCardView({
     try {
       await navigator.clipboard.writeText(run.text);
       setCopyState("copied");
+      animateFeedback(
+        copyIconRef.current,
+        [
+          { transform: "rotate(-35deg) scale(0.35)" },
+          { transform: "rotate(10deg) scale(1.18)" },
+          { transform: "rotate(0deg) scale(1)" },
+        ],
+        440,
+        "bouncy",
+      );
     } catch {
       setCopyState("failed");
     }
@@ -241,38 +263,47 @@ function ModelCardView({
     if (status !== "pending" || reduce || !cardRef.current) return;
     const card = cardRef.current;
     const effects: gsap.core.Tween[] = [];
-    withMotion(({ gsap }) => {
-      effects.push(
-        gsap.to(card.querySelector(".skeleton-shimmer"), {
-          xPercent: 200,
-          duration: 1.1,
-          repeat: -1,
-          ease: "none",
-        }),
-      );
-      if (!coarsePointer.matches) {
+    const start = () =>
+      withMotion(({ gsap }) => {
         effects.push(
-          gsap.to(card.querySelectorAll(".pending-pixels > span:not(.skeleton-shimmer)"), {
-            opacity: 0.25,
-            duration: 0.6,
+          gsap.to(card.querySelector(".skeleton-shimmer"), {
+            xPercent: 200,
+            duration: 1.1,
             repeat: -1,
-            yoyo: true,
-            stagger: 0.08,
-            ease: "sine.inOut",
+            ease: "none",
           }),
         );
-        effects.push(
-          gsap.to(card.querySelector(".pending-cursor"), {
-            opacity: 0.25,
-            duration: 0.45,
-            repeat: -1,
-            yoyo: true,
-            ease: "steps(1)",
-          }),
-        );
-      }
+        if (!coarsePointer.matches) {
+          effects.push(
+            gsap.to(card.querySelectorAll(".pending-pixels > span:not(.skeleton-shimmer)"), {
+              opacity: 0.25,
+              duration: 0.6,
+              repeat: -1,
+              yoyo: true,
+              stagger: 0.08,
+              ease: "sine.inOut",
+            }),
+          );
+          effects.push(
+            gsap.to(card.querySelector(".pending-cursor"), {
+              opacity: 0.25,
+              duration: 0.45,
+              repeat: -1,
+              yoyo: true,
+              ease: "steps(1)",
+            }),
+          );
+        }
+      });
+    const visibility = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && !document.hidden) {
+        if (!effects.length) start();
+        else for (const effect of effects) effect.play();
+      } else for (const effect of effects) effect.pause();
     });
+    visibility.observe(card);
     return () => {
+      visibility.disconnect();
       for (const effect of effects) effect.kill();
     };
   }, [status, reduce]);
@@ -288,29 +319,37 @@ function ModelCardView({
   useEffect(() => {
     const card = cardRef.current;
     if (status !== "done" || reduce || !card) return;
+    // Settling a skipped descendant forces its layout. Its existing scroll
+    // entrance provides the reveal later; only pop cards the visitor can see now.
+    const rect = card.getBoundingClientRect();
+    if (rect.bottom <= 0 || rect.top >= innerHeight) return;
+    let settle: gsap.Context | undefined;
     withMotion(({ gsap }) => {
-      const plane = card.querySelector(".card-tilt");
-      if (plane)
-        gsap.fromTo(
-          plane,
-          { scale: 0.985 },
-          { scale: 1, duration: 0.5, ease: "arenaSnap", clearProps: "scale" },
-        );
-      const award = card.querySelector(".answer-award:not(.answer-award-fastest)");
-      if (award)
-        gsap.fromTo(
-          award,
-          { scale: 0.5, opacity: 0 },
-          {
-            scale: 1,
-            opacity: 1,
-            duration: 0.5,
-            ease: "arenaSnap",
-            delay: 0.05,
-            clearProps: "scale,opacity",
-          },
-        );
+      settle = gsap.context(() => {
+        const plane = card.querySelector(".card-tilt");
+        if (plane)
+          gsap.fromTo(
+            plane,
+            { scale: 0.985 },
+            { scale: 1, duration: 0.5, ease: "arenaSnap", clearProps: "scale" },
+          );
+        const award = card.querySelector(".answer-award:not(.answer-award-fastest)");
+        if (award)
+          gsap.fromTo(
+            award,
+            { scale: 0.5, opacity: 0 },
+            {
+              scale: 1,
+              opacity: 1,
+              duration: 0.5,
+              ease: "arenaSnap",
+              delay: 0.05,
+              clearProps: "scale,opacity",
+            },
+          );
+      });
     });
+    return () => settle?.revert();
   }, [status, reduce]);
 
   return (
@@ -337,15 +376,7 @@ function ModelCardView({
                 {run?.text && status === "done" ? (
                   <button
                     type="button"
-                    onClick={(event) => {
-                      animateFeedback(
-                        event.currentTarget.firstElementChild,
-                        [{ transform: "scale(0.8)" }, { transform: "scale(1)" }],
-                        undefined,
-                        "bouncy",
-                      );
-                      void copyText();
-                    }}
+                    onClick={() => void copyText()}
                     aria-label={`Copy ${model.name} answer`}
                     title={
                       copyState === "failed"
@@ -356,7 +387,7 @@ function ModelCardView({
                     }
                     className="icon-button"
                   >
-                    <span className="action-icon" aria-hidden="true">
+                    <span ref={copyIconRef} className="action-icon" aria-hidden="true">
                       {copyState === "copied" ? (
                         <Check className="h-3.5 w-3.5" aria-hidden="true" />
                       ) : (
