@@ -1717,7 +1717,7 @@ summary:focus-visible,
     --columns: 3;
   }
 }
-@media (min-width: 1280px) {
+@media (min-width: 1680px) {
   .main-navigation {
     position: absolute;
     left: 50%;

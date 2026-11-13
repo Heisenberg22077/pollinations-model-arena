@@ -74,6 +74,28 @@ for (const connected of [true, false]) {
   }
 }
 
+for (const connected of [true, false]) {
+  test(`${connected ? "connected" : "unconnected"} desktop navigation leaves room for account controls`, async ({
+    page,
+  }) => {
+    await mockApp(page, { connected, motion: false });
+    await page.evaluate(() => document.fonts.ready);
+    for (const theme of ["day", "night"]) {
+      if (theme === "night") {
+        await page.getByRole("button", { name: "Switch to night mode", exact: true }).click();
+        await expect(page.locator("html")).toHaveAttribute("data-color-mode", "night");
+      }
+      for (const width of [1024, 1280, 1440, 1680, 1920]) {
+        await page.setViewportSize({ width, height: 1000 });
+        const report = await page.evaluate(headerReport);
+        expect(report.outsideHeader, `${theme} ${width}px`).toEqual([]);
+        expect(report.overlaps, `${theme} ${width}px`).toEqual([]);
+        expect(report.overflowX, `${theme} ${width}px`).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+}
+
 test("branding follows available header space and returns when it grows", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 800 });
   await mockApp(page, { connected: false, motion: false });
