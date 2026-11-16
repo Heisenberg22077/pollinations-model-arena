@@ -777,6 +777,50 @@ test.describe("touch and reduced motion", () => {
     await page.locator(".mobile-menu-button").tap();
     await expect(page.locator(".bee-bubble")).not.toHaveClass(/is-visible/);
   });
+
+  test("the bubble keeps its clearance while the bee climbs after a snack", async ({ page }) => {
+    await trackBee(page);
+    await prepare(page);
+    // Landscape phone: the snack lures the bee to the garden floor, then it
+    // climbs back toward the top anchor at flight speed with a live line.
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.waitForTimeout(600);
+    const boop = page.getByRole("button", { name: "Boop the bee", exact: true });
+    await boop.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(450);
+    await page.mouse.move(422, 24);
+    await expect
+      .poll(() => page.evaluate(() => window.__beePosition?.y ?? 999), { timeout: 8000 })
+      .toBeLessThan(120);
+    await page.getByRole("button", { name: "Feed the bee", exact: true }).tap();
+    const pending = page.evaluate(
+      () =>
+        new Promise<{ y: number; bottom: number; beeY: number }[]>((resolve) => {
+          const bubble = document.querySelector(".bee-bubble");
+          const out: { y: number; bottom: number; beeY: number }[] = [];
+          const started = performance.now();
+          const sample = () => {
+            const bee = window.__beePosition;
+            if (bubble?.classList.contains("is-visible") && bee) {
+              const rect = bubble.getBoundingClientRect();
+              out.push({ y: rect.y, bottom: rect.bottom, beeY: bee.y });
+            }
+            if (performance.now() - started < 6000) requestAnimationFrame(sample);
+            else resolve(out);
+          };
+          requestAnimationFrame(sample);
+        }),
+    );
+    await page.waitForTimeout(900);
+    await boop.tap();
+    const samples = await pending;
+    expect(samples.length).toBeGreaterThan(60);
+    // Prove the climb actually happened so the clearance check cannot pass vacuously.
+    const beeYs = samples.map((s) => s.beeY);
+    expect(Math.max(...beeYs) - Math.min(...beeYs)).toBeGreaterThan(80);
+    const violations = samples.filter((s) => s.y > 9 && s.bottom > s.beeY - 14);
+    expect(violations).toEqual([]);
+  });
 });
 
 test.describe("speech bubble calmness", () => {

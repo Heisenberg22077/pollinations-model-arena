@@ -293,6 +293,8 @@ export function createBee(
     mood = next;
     reactionUntil = clock + 0.65;
   };
+  const hopOffset = () =>
+    mood === "excited" ? Math.sin(Math.max(0, (reactionUntil - clock) / 0.65) * Math.PI) * 5 : 0;
   // Cache dimensions and protected UI once per line; following needs no layout reads.
   const measureBubble = () => {
     bubbleGeometryDirty = false;
@@ -305,8 +307,11 @@ export function createBee(
     const bottom = top + (viewport?.height ?? height) - 16;
     bubbleBounds = { left, top, right, bottom };
     bubble.style.maxWidth = `${Math.min(240, right - left)}px`;
-    bubbleW = bubble.offsetWidth;
-    bubbleH = bubble.offsetHeight;
+    // Fractional rect sizes: offsetHeight rounds, and a rounded height lets the
+    // rendered bubble bottom drift into the bee's clearance by a subpixel.
+    const bubbleRect = bubble.getBoundingClientRect();
+    bubbleW = bubbleRect.width;
+    bubbleH = bubbleRect.height;
     bubbleObstacles = [];
     const cardRects = new Map<Element, DOMRect>();
     const inViewport = (r: DOMRect) =>
@@ -400,13 +405,19 @@ export function createBee(
       x: clamp(bubbleX, left, right - bubbleW),
       y: clamp(bubbleY, top, bottom - bubbleH),
     };
+    // The glide lags a climbing bee, so the rendered bubble — not just its
+    // target — must stay clear of the character. Bounds win when the bee is
+    // pinned against the top edge and no clearance fits above it. The extra
+    // half pixel absorbs subpixel rounding between layout and painted rects.
+    const beeY = reduced ? staticBee.y : Math.round(pos.y - hopOffset());
+    const clearY = (y: number) => clamp(Math.min(y, beeY - 14.5 - bubbleH), top, bottom - bubbleH);
     if (!bubbleShown) {
       bubble.classList.add("is-visible");
       bubbleShown = true;
     }
     if (bubbleX === -999) {
       bubbleX = position.x;
-      bubbleY = position.y;
+      bubbleY = clearY(position.y);
       bubble.style.transform = `translate3d(${bubbleX}px, ${bubbleY}px, 0)`;
       return;
     }
@@ -421,7 +432,7 @@ export function createBee(
       stepY *= maxStep / stepLen;
     }
     const nextX = bubbleX + stepX;
-    const nextY = bubbleY + stepY;
+    const nextY = clearY(bubbleY + stepY);
     if (Math.abs(nextX - bubbleX) > 0.05 || Math.abs(nextY - bubbleY) > 0.05) {
       bubbleX = nextX;
       bubbleY = nextY;
@@ -973,7 +984,7 @@ export function createBee(
     const flap = (Math.round(Math.sin(flapPhase) * 2) / 2) * (perched ? 0.25 : 0.9);
     const reaction = Math.max(0, (reactionUntil - clock) / 0.65);
     const squash = mood === "startled" ? Math.sin(reaction * Math.PI) * 0.14 : 0;
-    const hop = mood === "excited" ? Math.sin(reaction * Math.PI) * 5 : 0;
+    const hop = hopOffset();
     const u = 1.7;
     ctx.save();
     ctx.globalAlpha = opacity;
