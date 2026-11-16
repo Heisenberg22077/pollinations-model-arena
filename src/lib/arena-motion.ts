@@ -752,7 +752,10 @@ function canvasScene(api: Stack) {
       velocity *= 0.94;
     }
     if (confetti.length || bee.active || celebrationDirty) {
-      burstCtx.clearRect(0, 0, innerWidth, innerHeight);
+      // Reading innerWidth/innerHeight here forces a document style+layout flush
+      // every tick (GSAP wrote inline styles earlier in the same frame). The
+      // backing size is cached by resize(), so clearing stays read-free.
+      burstCtx.clearRect(0, 0, fireworks.width, fireworks.height);
       for (let i = confetti.length - 1; i >= 0; i--) {
         const p = confetti[i];
         p.age += dt;
@@ -1044,12 +1047,7 @@ function tactileScene(api: Stack) {
     });
   };
 
-  const down = (event: PointerEvent) => {
-    if (event.button !== 0) return;
-    const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest(".bee-home")) return;
-    const node = target?.closest<HTMLElement>(pressable) ?? null;
-    if (!node || node.matches(":disabled") || node.getAttribute("aria-disabled") === "true") return;
+  const press = (node: HTMLElement) => {
     if (pressed && pressed !== node) release(false);
     pressed = node;
     withMotion(() => {
@@ -1061,36 +1059,69 @@ function tactileScene(api: Stack) {
       });
     });
   };
+
+  const down = (event: PointerEvent) => {
+    if (event.button !== 0) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest(".bee-home")) return;
+    const node = target?.closest<HTMLElement>(pressable) ?? null;
+    if (!node || node.matches(":disabled") || node.getAttribute("aria-disabled") === "true") return;
+    press(node);
+  };
   const up = () => release(true);
   const cancel = () => release(false);
+
+  // Keyboard activation deserves the same squish/rebound as a pointer press.
+  const keyDown = (event: KeyboardEvent) => {
+    if (event.repeat || (event.key !== "Enter" && event.key !== " ")) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest(".bee-home")) return;
+    const node = target?.closest<HTMLElement>(pressable) ?? null;
+    if (!node || node.matches(":disabled") || node.getAttribute("aria-disabled") === "true") return;
+    if (event.key === " " && node.matches("a[href]")) return;
+    if (!node.matches("button, summary, [role='button'], a[href]")) return;
+    press(node);
+  };
+  const keyUp = (event: KeyboardEvent) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    release(true);
+  };
 
   const click = (event: MouseEvent) => {
     const target = event.target instanceof Element ? event.target : null;
     if (target?.closest(".bee-home")) return;
     const node = target?.closest<HTMLElement>(pressable) ?? null;
-    if (!node || node.matches(":disabled")) return;
+    if (!node || node.matches(":disabled") || node.getAttribute("aria-disabled") === "true") return;
     withMotion(() => {
       const host = node.closest<HTMLElement>("[data-model-id]");
       const tint = host?.style.getPropertyValue("--provider-color").trim() || undefined;
       const isRun = node.classList.contains("run-button");
-      burstAt?.(
-        event.clientX,
-        event.clientY,
-        isRun ? 30 : 12,
-        tint ?? (isRun ? "#f59e0b" : undefined),
-      );
+      // Keyboard and assistive-tech clicks carry clientX/Y = 0; bursting from the
+      // viewport corner detaches the feedback from the control that was activated.
+      let x = event.clientX;
+      let y = event.clientY;
+      if (event.detail === 0 || (x === 0 && y === 0)) {
+        const rect = node.getBoundingClientRect();
+        x = rect.left + rect.width / 2;
+        y = rect.top + rect.height / 2;
+      }
+      burstAt?.(x, y, isRun ? 30 : 12, tint ?? (isRun ? "#f59e0b" : undefined));
     });
   };
 
   document.addEventListener("pointerdown", down);
   document.addEventListener("pointerup", up);
   document.addEventListener("pointercancel", cancel);
+  document.addEventListener("keydown", keyDown);
+  document.addEventListener("keyup", keyUp);
   document.addEventListener("click", click);
   window.addEventListener("blur", cancel);
   return () => {
     document.removeEventListener("pointerdown", down);
     document.removeEventListener("pointerup", up);
     document.removeEventListener("pointercancel", cancel);
+    document.removeEventListener("keydown", keyDown);
+    document.removeEventListener("keyup", keyUp);
     document.removeEventListener("click", click);
     window.removeEventListener("blur", cancel);
     // Kill, don't animate: cleanup runs inside matchMedia revert, so a new tween here would survive it.
@@ -1609,12 +1640,7 @@ function choreography(api: Stack) {
   const results = document.querySelector("#results");
   if (results) observer.observe(results, { childList: true, subtree: true });
   const scrambles = new WeakMap<HTMLElement, gsap.core.Tween>();
-  const hoverScramble = (event: PointerEvent) => {
-    const target =
-      event.target instanceof Element ? event.target.closest(".nav-link, .surprise-button") : null;
-    if (!target || target.contains(event.relatedTarget as Node | null)) return;
-    // Touch taps decode the Surprise label; nav links stay mouse-only.
-    if (event.pointerType !== "mouse" && !target.classList.contains("surprise-button")) return;
+  const decodeLabel = (target: Element) => {
     const label = target.querySelector<HTMLElement>(".scramble-label");
     if (!label) return;
     withMotion(() => {
@@ -1644,7 +1670,23 @@ function choreography(api: Stack) {
       );
     });
   };
+  const hoverScramble = (event: PointerEvent) => {
+    const target =
+      event.target instanceof Element ? event.target.closest(".nav-link, .surprise-button") : null;
+    if (!target || target.contains(event.relatedTarget as Node | null)) return;
+    // Touch taps decode the Surprise label; nav links stay mouse-only.
+    if (event.pointerType !== "mouse" && !target.classList.contains("surprise-button")) return;
+    decodeLabel(target);
+  };
+  // Keyboard focus gets the same decode; :focus-visible keeps pointer clicks quiet.
+  const focusScramble = (event: FocusEvent) => {
+    const target =
+      event.target instanceof Element ? event.target.closest(".nav-link, .surprise-button") : null;
+    if (!target?.matches(":focus-visible")) return;
+    decodeLabel(target);
+  };
   document.addEventListener("pointerover", hoverScramble);
+  document.addEventListener("focusin", focusScramble);
   const visibility = () => {
     const rect = document.querySelector(".garden-scene-hero")?.getBoundingClientRect();
     if (document.hidden || !rect || rect.bottom <= 0 || rect.top >= innerHeight) float.pause();
@@ -1664,6 +1706,7 @@ function choreography(api: Stack) {
     }
     cardTriggers.clear();
     document.removeEventListener("pointerover", hoverScramble);
+    document.removeEventListener("focusin", focusScramble);
     document.removeEventListener("visibilitychange", visibility);
     cleanup.forEach((fn) => {
       fn();

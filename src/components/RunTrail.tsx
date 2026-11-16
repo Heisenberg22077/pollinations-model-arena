@@ -34,56 +34,52 @@ export function RunTrail({
     if (reduce || (!landed.length && !celebrate)) return;
     const rect = trail.getBoundingClientRect();
     if (rect.bottom < 0 || rect.top > window.innerHeight) return;
-    let animation: gsap.Context | undefined;
+    // The application context owns these tweens: reverting a per-effect context
+    // here would cut each 0.55s landing bounce at the next settlement (~90ms).
     withMotion(({ gsap }) => {
-      animation = gsap.context(() => {
-        if (celebrate) {
-          const pixels = trail.querySelectorAll(".trail-pixel");
-          gsap
-            .timeline()
-            .fromTo(
-              pixels,
-              { y: 0 },
-              {
-                y: -6,
-                duration: 0.2,
-                stagger: { amount: 0.28, from: "center" },
-                ease: "power2.out",
-              },
-            )
-            .to(
-              pixels,
-              {
-                y: 0,
-                duration: 0.5,
-                stagger: { amount: 0.28, from: "center" },
-                ease: "arenaSnap",
-                clearProps: "transform",
-              },
-              0.2,
-            );
-          return;
-        }
-        gsap.fromTo(
-          landed
-            .map((node) => node.querySelector<HTMLElement>(".trail-pixel"))
-            .filter((node) => node !== null),
-          { y: -5, rotation: -45, scale: 0.6 },
-          {
-            y: 0,
-            rotation: 0,
-            scale: 1,
-            duration: 0.55,
-            ease: "arenaSnap",
-            stagger: 0.045,
-            clearProps: "transform",
-          },
-        );
-      });
+      if (celebrate) {
+        const pixels = trail.querySelectorAll(".trail-pixel");
+        gsap
+          .timeline()
+          .fromTo(
+            pixels,
+            { y: 0 },
+            {
+              y: -6,
+              duration: 0.2,
+              stagger: { amount: 0.28, from: "center" },
+              ease: "power2.out",
+            },
+          )
+          .to(
+            pixels,
+            {
+              y: 0,
+              duration: 0.5,
+              stagger: { amount: 0.28, from: "center" },
+              ease: "arenaSnap",
+              clearProps: "transform",
+            },
+            0.2,
+          );
+        return;
+      }
+      gsap.fromTo(
+        landed
+          .map((node) => node.querySelector<HTMLElement>(".trail-pixel"))
+          .filter((node) => node !== null),
+        { y: -5, rotation: -45, scale: 0.6 },
+        {
+          y: 0,
+          rotation: 0,
+          scale: 1,
+          duration: 0.55,
+          ease: "arenaSnap",
+          stagger: 0.045,
+          clearProps: "transform",
+        },
+      );
     });
-    return () => {
-      animation?.revert();
-    };
   }, [runs, reduce, models, running]);
   return (
     <ol ref={ref} className="run-trail" aria-label="Model progress">

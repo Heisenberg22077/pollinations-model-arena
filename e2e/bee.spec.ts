@@ -778,3 +778,88 @@ test.describe("touch and reduced motion", () => {
     await expect(page.locator(".bee-bubble")).not.toHaveClass(/is-visible/);
   });
 });
+
+test.describe("speech bubble calmness", () => {
+  const phone = devices["iPhone 13"];
+  test.use({
+    viewport: phone.viewport,
+    userAgent: phone.userAgent,
+    deviceScaleFactor: phone.deviceScaleFactor,
+    isMobile: phone.isMobile,
+    hasTouch: phone.hasTouch,
+  });
+  test("a spoken line glides with the bee instead of teleporting or flickering", async ({
+    page,
+  }) => {
+    // Logged-out first visit: the Connect CTA and empty roster are part of the
+    // obstacle set that makes the bubble flee on a packed phone viewport.
+    await page.route("**/*", (route) => {
+      const url = route.request().url();
+      if (url.startsWith("http://127.0.0.1:5173/")) return route.continue();
+      for (const lib of ["gsap@3.15.1", "lenis@1.3.27"])
+        if (url.includes(`/${lib}/dist/`)) {
+          const filename = new URL(url).pathname.split("/").pop() ?? "";
+          return route.fulfill({
+            path: `node_modules/${lib.split("@")[0]}/dist/${filename}`,
+            contentType: filename.endsWith(".css") ? "text/css" : "application/javascript",
+          });
+        }
+      if (url.includes("gen.pollinations.ai") && url.endsWith("/models"))
+        return route.fulfill({ headers: { "access-control-allow-origin": "*" }, json: [] });
+      return route.fulfill({ status: 204, body: "" });
+    });
+    await page.goto("/");
+    await page.waitForFunction(
+      () => document.documentElement.dataset.motionEngine === "gsap",
+      null,
+      { timeout: 15000 },
+    );
+    await page.locator(".bee-home summary").tap();
+    const sample = () =>
+      page.evaluate(
+        () =>
+          new Promise<{ x: number; y: number; t: number; visible: boolean }[]>((resolve) => {
+            const bubble = document.querySelector<HTMLElement>(".bee-bubble");
+            if (!bubble) throw Error("Missing bee bubble");
+            const out: { x: number; y: number; t: number; visible: boolean }[] = [];
+            const t0 = performance.now();
+            const step = () => {
+              const rect = bubble.getBoundingClientRect();
+              out.push({
+                x: rect.x,
+                y: rect.y,
+                t: performance.now() - t0,
+                visible: bubble.classList.contains("is-visible"),
+              });
+              if (performance.now() - t0 < 1800) requestAnimationFrame(step);
+              else resolve(out);
+            };
+            requestAnimationFrame(step);
+          }),
+      );
+    let maxSpeed = 0;
+    let flickers = 0;
+    for (let round = 0; round < 3; round++) {
+      await page.getByRole("button", { name: "Boop the bee", exact: true }).tap();
+      await expect.poll(() => trigger(page), { timeout: 7000 }).toMatch(/boop/);
+      const frames = await sample();
+      expect(frames.length).toBeGreaterThan(30);
+      const firstVisible = frames.find((f) => f.visible)?.t ?? 0;
+      for (let i = 1; i < frames.length; i++) {
+        // The placement snap at line start is masked by the opacity fade-in.
+        if (!frames[i - 1].visible || frames[i].t < firstVisible + 200) continue;
+        const distance = Math.hypot(frames[i].x - frames[i - 1].x, frames[i].y - frames[i - 1].y);
+        // Velocity, not raw distance: a slow headless frame accumulates several
+        // damped steps, while a candidate teleport moves instantly.
+        maxSpeed = Math.max(
+          maxSpeed,
+          (distance / Math.max(1, frames[i].t - frames[i - 1].t)) * 1000,
+        );
+        if (frames[i - 1].visible && !frames[i].visible) flickers++;
+      }
+      await page.waitForTimeout(2600);
+    }
+    expect(flickers).toBe(0);
+    expect(maxSpeed).toBeLessThan(1500);
+  });
+});

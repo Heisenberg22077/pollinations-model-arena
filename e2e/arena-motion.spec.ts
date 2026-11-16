@@ -1,6 +1,12 @@
 import { expect, test } from "@playwright/test";
 import { CORS, delay, fulfillChat, IDS, mockApp, observeMotion } from "./fixtures";
 
+declare global {
+  interface Window {
+    __viewportReads: number;
+  }
+}
+
 const diagnostics = (page: import("@playwright/test").Page) =>
   page.evaluate(async () => {
     // Inspect the application's own clock, independently of GSAP/ScrollTrigger internal listeners.
@@ -32,6 +38,39 @@ test("pixel progress follows actual settlements and rests when paused", async ({
   );
   expect(moving).toBe(false);
   await expect(trail.locator('li[data-status="done"]')).toHaveCount(6);
+});
+
+test("a landing bounce survives later settlements and stops when paused", async ({ page }) => {
+  await mockApp(page, {
+    chat: async (route, request) => {
+      const index = (IDS as readonly string[]).indexOf(request.model);
+      await delay(index === 0 ? 300 : index === 1 ? 550 : 1600);
+      await fulfillChat(route, request);
+    },
+  });
+  await page.getByRole("button", { name: "Run the table", exact: true }).click();
+  const trail = page.getByRole("list", { name: "Model progress", exact: true });
+  await expect(trail.locator('li[data-status="done"]').first()).toBeVisible({ timeout: 15000 });
+  // The second settlement lands 250ms into the first pixel's 0.55s bounce; sample
+  // its tween on the very frame the second done state appears, not after a wait.
+  const survived = await page.waitForFunction(
+    () => {
+      const done = document.querySelectorAll('.run-trail li[data-status="done"]');
+      if (done.length < 2) return null;
+      const pixel = done[0].querySelector(".trail-pixel");
+      if (!pixel) return null;
+      return window.gsap?.getTweensOf(pixel).some((t) => t.isActive()) ?? false;
+    },
+    null,
+    { timeout: 5000 },
+  );
+  expect(await survived.jsonValue()).toBe(true);
+  const pixel = trail.locator('li[data-status="done"] .trail-pixel').first();
+  await page.getByRole("button", { name: "Pause animations", exact: true }).click();
+  const afterPause = await pixel.evaluate(
+    (el) => window.gsap?.getTweensOf(el).some((t) => t.isActive()) ?? false,
+  );
+  expect(afterPause).toBe(false);
 });
 
 test("lineup pixels respond directly after adding, removing and readding models", async ({
@@ -339,4 +378,120 @@ test("reveals the decoded blob image and keeps it usable when paused mid-mosaic"
   await page.keyboard.press("Escape");
   await expect(preview).toBeFocused();
   expect(state.pageErrors).toEqual([]);
+});
+
+test("the celebration canvas clears without reading viewport size every frame", async ({
+  page,
+}) => {
+  await mockApp(page);
+  await expect(page.locator("html")).toHaveAttribute("data-motion-engine", "gsap");
+  await page.evaluate(() => {
+    window.__viewportReads = 0;
+    for (const key of ["innerWidth", "innerHeight"] as const) {
+      let proto: object | null = window;
+      let desc: PropertyDescriptor | undefined;
+      while (proto) {
+        desc = Object.getOwnPropertyDescriptor(proto, key);
+        if (desc) break;
+        proto = Object.getPrototypeOf(proto);
+      }
+      const original = desc?.get;
+      if (!original) continue;
+      Object.defineProperty(window, key, {
+        configurable: true,
+        get() {
+          window.__viewportReads++;
+          return original.call(this);
+        },
+      });
+    }
+  });
+  await page.locator(".theme-button").dispatchEvent("click");
+  // Cover + swap finish inside ~700ms; the lift (the phase users feel) runs after.
+  await page.waitForTimeout(900);
+  await page.evaluate(() => {
+    window.__viewportReads = 0;
+  });
+  await page.waitForTimeout(900);
+  const reads = await page.evaluate(() => window.__viewportReads);
+  expect(reads).toBeLessThan(10);
+});
+
+test("keyboard activation gets the same tactile press as a pointer", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("model-table:bee", "false"));
+  await mockApp(page);
+  const preset = page.getByRole("button", { name: "Core 6", exact: true });
+  await expect(preset).toBeEnabled();
+  await preset.focus();
+  const scale = () =>
+    preset.evaluate((el) => {
+      const m = getComputedStyle(el).transform.match(/matrix\(([^,]+)/);
+      return m ? Number(m[1]) : 1;
+    });
+  await page.keyboard.down("Space");
+  await page.waitForTimeout(160);
+  expect(await scale()).toBeLessThan(0.99);
+  await page.keyboard.up("Space");
+  await page.waitForTimeout(500);
+  expect(await scale()).toBeCloseTo(1, 1);
+});
+
+test("keyboard clicks burst from the control, not the viewport corner", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("model-table:bee", "false"));
+  await mockApp(page);
+  const preset = page.getByRole("button", { name: "Core 6", exact: true });
+  await expect(preset).toBeEnabled();
+  await preset.focus();
+  const center = await preset.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(120);
+  const counts = await page.evaluate(({ x, y }) => {
+    const canvas = document.querySelector<HTMLCanvasElement>("#pollen-celebration");
+    if (!canvas) throw new Error("Missing celebration canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Missing 2d context");
+    const rect = canvas.getBoundingClientRect();
+    const sx = canvas.width / rect.width;
+    const sy = canvas.height / rect.height;
+    const count = (cx: number, cy: number) => {
+      const r = 90;
+      const left = Math.max(0, Math.round((cx - r) * sx));
+      const top = Math.max(0, Math.round((cy - r) * sy));
+      const width = Math.min(canvas.width - left, Math.round(2 * r * sx));
+      const height = Math.min(canvas.height - top, Math.round(2 * r * sy));
+      if (width <= 0 || height <= 0) return 0;
+      const data = ctx.getImageData(left, top, width, height).data;
+      let n = 0;
+      for (let i = 3; i < data.length; i += 4) if (data[i] > 10) n++;
+      return n;
+    };
+    return { atControl: count(x, y), atCorner: count(25, 25) };
+  }, center);
+  expect(counts.atControl).toBeGreaterThan(0);
+  expect(counts.atCorner).toBe(0);
+});
+
+test("keyboard focus decodes nav labels like a mouse hover", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("model-table:bee", "false"));
+  await mockApp(page);
+  await expect(page.locator("html")).toHaveAttribute("data-motion-engine", "gsap");
+  const link = page.getByRole("link", { name: "Lineup", exact: true });
+  await expect(link).toBeVisible();
+  // Tab first so the browser treats the next focus as keyboard modality (:focus-visible).
+  await page.keyboard.press("Tab");
+  await link.focus();
+  await page.waitForFunction(
+    () => {
+      const label = document.querySelector<HTMLElement>(
+        '.main-navigation a[aria-label="Lineup"] .scramble-label',
+      );
+      return Boolean(label && label.textContent !== label.dataset.text);
+    },
+    undefined,
+    { timeout: 1500, polling: 40 },
+  );
+  await expect(link.locator(".scramble-label")).toHaveText("Lineup", { timeout: 2000 });
 });

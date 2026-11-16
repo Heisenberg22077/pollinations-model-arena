@@ -222,6 +222,8 @@ export function createBee(
   let speechTarget: { x: number; y: number } | null = null;
   let bubbleBounds = { left: 8, top: 8, right: width - 8, bottom: height - 8 };
   let bubbleObstacles: DOMRect[] = [];
+  let bubbleGap = 0;
+  let bubbleSide = 0;
 
   const applyBubbleColors = () => {
     bubble.style.setProperty("--bee-bubble-bg", colors.bubbleBg);
@@ -243,6 +245,8 @@ export function createBee(
     bubble.classList.add("is-visible");
     bubbleShown = true;
     bubbleVisible = true;
+    bubbleX = -999;
+    bubbleY = -999;
     measureBubble();
     followBubble();
     bubbleHideAt = speech.until;
@@ -292,6 +296,8 @@ export function createBee(
   // Cache dimensions and protected UI once per line; following needs no layout reads.
   const measureBubble = () => {
     bubbleGeometryDirty = false;
+    bubbleGap = 0;
+    bubbleSide = 0;
     const viewport = window.visualViewport;
     const left = (viewport?.offsetLeft ?? 0) + 8;
     const top = (viewport?.offsetTop ?? 0) + 8;
@@ -356,10 +362,16 @@ export function createBee(
     const { left, top, right, bottom } = bubbleBounds;
     // A little more headroom keeps multi-line phone replies above the Bzz
     // disclosure without covering it or detaching speech from the character.
-    for (const gap of [24, 56, 88]) {
-      const y = clamp(beeY - bubbleH - gap, top, bottom - bubbleH);
-      for (const candidate of [beeX + 20, beeX - bubbleW - 20, beeX - bubbleW / 2]) {
-        const x = clamp(candidate, left, right - bubbleW);
+    // Keep the last clean gap/side until it actually collides: re-picking the
+    // first free candidate every frame made the bubble bounce across the bee.
+    const gaps = [24, 56, 88];
+    const xs = [beeX + 20, beeX - bubbleW - 20, beeX - bubbleW / 2];
+    for (let gi = 0; gi < gaps.length; gi++) {
+      const gap = (bubbleGap + gi) % gaps.length;
+      const y = clamp(beeY - bubbleH - gaps[gap], top, bottom - bubbleH);
+      for (let si = 0; si < xs.length; si++) {
+        const side = (bubbleSide + si) % xs.length;
+        const x = clamp(xs[side], left, right - bubbleW);
         if (
           bubbleObstacles.every(
             (r) =>
@@ -368,26 +380,52 @@ export function createBee(
               y + bubbleH + 6 <= r.top ||
               y - 6 >= r.bottom,
           )
-        )
+        ) {
+          bubbleGap = gap;
+          bubbleSide = side;
           return { x, y };
+        }
       }
     }
     return null;
   };
-  const followBubble = () => {
+  const followBubble = (dt = 1 / 60) => {
     if (!bubbleVisible || bubbleGeometryDirty || clock < scrollQuietAt) return;
-    const position = bubblePosition(reduced ? staticBee.x : pos.x, reduced ? staticBee.y : pos.y);
-    const shown = Boolean(position);
-    if (shown !== bubbleShown) {
-      bubble.classList.toggle("is-visible", shown);
-      bubbleShown = shown;
+    const { left, top, right, bottom } = bubbleBounds;
+    const found = bubblePosition(reduced ? staticBee.x : pos.x, reduced ? staticBee.y : pos.y);
+    if (!found && bubbleX === -999) return;
+    // A packed phone viewport can leave no free spot mid-flight; holding the
+    // last placement beats fading the line out and back in somewhere else.
+    const position = found ?? {
+      x: clamp(bubbleX, left, right - bubbleW),
+      y: clamp(bubbleY, top, bottom - bubbleH),
+    };
+    if (!bubbleShown) {
+      bubble.classList.add("is-visible");
+      bubbleShown = true;
     }
-    if (!position) return;
-    const { x, y } = position;
-    if (Math.abs(x - bubbleX) > 0.5 || Math.abs(y - bubbleY) > 0.5) {
-      bubbleX = x;
-      bubbleY = y;
-      bubble.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+    if (bubbleX === -999) {
+      bubbleX = position.x;
+      bubbleY = position.y;
+      bubble.style.transform = `translate3d(${bubbleX}px, ${bubbleY}px, 0)`;
+      return;
+    }
+    const ease = reduced ? 1 : damp(10, dt);
+    let stepX = (position.x - bubbleX) * ease;
+    let stepY = (position.y - bubbleY) * ease;
+    // Cap the glide so a placement switch reads as a swoosh, never a teleport.
+    const stepLen = Math.hypot(stepX, stepY);
+    const maxStep = 600 * dt;
+    if (stepLen > maxStep) {
+      stepX *= maxStep / stepLen;
+      stepY *= maxStep / stepLen;
+    }
+    const nextX = bubbleX + stepX;
+    const nextY = bubbleY + stepY;
+    if (Math.abs(nextX - bubbleX) > 0.05 || Math.abs(nextY - bubbleY) > 0.05) {
+      bubbleX = nextX;
+      bubbleY = nextY;
+      bubble.style.transform = `translate3d(${bubbleX}px, ${bubbleY}px, 0)`;
     }
   };
   const ask = (
@@ -817,7 +855,7 @@ export function createBee(
         if (fruits[i].age >= fruits[i].life) fruits.splice(i, 1);
       }
       home?.classList.toggle("has-snack", fruits.length > 0);
-      followBubble();
+      followBubble(dt);
       return;
     }
     pointerSpeed *= 0.02 ** dt;
@@ -910,7 +948,7 @@ export function createBee(
       arrived = true;
     }
 
-    followBubble();
+    followBubble(dt);
   };
 
   const draw = (ctx: CanvasRenderingContext2D) => {
